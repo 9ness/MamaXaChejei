@@ -42,7 +42,7 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
     const playerXRef = useRef(50);
 
     // Timers & Loop
-    const requestRef = useRef<number>();
+    const requestRef = useRef<number>(0);
     const lastTimeRef = useRef<number>(0);
     const spawnTimerRef = useRef<number>(0);
 
@@ -70,22 +70,23 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
     };
 
     const updateGameLogic = (delta: number) => {
-        // 1. Difficulty
+        // 1. Difficulty: Aggressive Scaling
+        // Difficulty increases 10% per point instead of 5%
         const currentScore = scoreRef.current;
-        const currentDifficulty = 1 + (currentScore * 0.05);
+        const currentDifficulty = 1 + (currentScore * 0.12); // Faster ramp-up
 
-        // 2. Spawn
+        // 2. Spawn System
         spawnTimerRef.current += delta;
-        // Spawn rate gets faster as difficulty increases
-        // Cap spawn rate at 300ms min
-        const spawnRate = Math.max(300, 1200 - (currentDifficulty * 50));
+        // Cap spawn rate at 400ms min to avoid impossible overlap, start at 1000ms
+        const spawnRate = Math.max(450, 1000 - (currentDifficulty * 60));
 
         if (spawnTimerRef.current > spawnRate) {
+            // Prevent spawning too close to edges due to zigzag
             itemsRef.current.push({
                 id: Date.now() + Math.random(),
-                x: Math.random() * 85 + 7.5, // Ensure inside bounds 7.5% - 92.5%
-                y: -15, // Start slightly higher
-                speed: 0.2 + (currentDifficulty * 0.04), // Progressive Speed
+                x: Math.random() * 70 + 15, // 15% - 85% bounds
+                y: -15,
+                speed: 0.25 + (currentDifficulty * 0.05), // Higher base speed + faster growth
                 emoji: Math.random() > 0.5 ? '🍺' : '🍻'
             });
             spawnTimerRef.current = 0;
@@ -100,24 +101,40 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
         let caughtPoints = 0;
         const nextItems: Item[] = [];
 
+        // Add zigzag phase ref or property if complex, but simple version:
+        // Use item ID or Y to determine phase
+        const timeFactor = Date.now() / 200; // time base for wave
+
         for (const item of itemsRef.current) {
+            // Vertical Move
             const newY = item.y + (item.speed * delta * 0.15);
+
+            // Horizontal ZigZag "Drunk" Movement
+            // Sine wave based on Item ID (random phase) and Y position
+            const wave = Math.sin((newY * 0.1) + (item.id % 100));
+            const horizontalShift = wave * 0.4 * delta * 0.1; // Amplitude adjusted
+            let newX = item.x + horizontalShift;
+
+            // Wall Clamp
+            if (newX < 5) newX = 5;
+            if (newX > 95) newX = 95;
 
             // Check Catch
             if (newY > 80 && newY < 95) {
-                if (item.x > playerLeft && item.x < playerRight) {
+                if (newX > playerLeft && newX < playerRight) {
                     caughtPoints++;
-                    continue; // Caught, remove from nextItems
+                    continue; // Caught
                 }
             }
 
             // Check Miss
             if (newY >= 100) {
                 missed = true;
-                break; // One miss is game over
+                break;
             } else {
-                item.y = newY; // Mutate works fine for Ref logic, but better clean obj
-                nextItems.push({ ...item, y: newY });
+                item.y = newY;
+                item.x = newX; // Update X too
+                nextItems.push({ ...item, y: newY, x: newX });
             }
         }
 
@@ -131,9 +148,8 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
                 scoreRef.current += caughtPoints;
             }
 
-            // Sync with React State for Render
             setGameState({
-                items: [...itemsRef.current], // shallow copy for render
+                items: [...itemsRef.current],
                 score: scoreRef.current,
                 gameOver: false,
                 isPlaying: true
