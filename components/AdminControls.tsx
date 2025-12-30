@@ -47,11 +47,11 @@ export function AdminControls() {
                 </h3>
                 <div className="space-y-4">
                     <div className="grid w-full gap-1.5">
-                        <Label htmlFor="bulk-text">Pegar lista (Formato por línea: Nombre Apellido1 Apellido2 Talla)</Label>
+                        <Label htmlFor="bulk-text">Pegar lista (Formato por línea: Número. Nombre Apellido1 Apellido2 Talla)</Label>
                         <Textarea
                             id="bulk-text"
-                            placeholder={`Juan Pérez López L
-Maria García Ruiz M`}
+                            placeholder={`1. Juan Pérez López L
+2.Maria García M`}
                             rows={5}
                             value={bulkText}
                             onChange={(e) => setBulkText(e.target.value)}

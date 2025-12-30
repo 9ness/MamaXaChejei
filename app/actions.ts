@@ -47,8 +47,7 @@ export async function getMembers(): Promise<Member[]> {
             // Prefer stored order (from bulk load), fallback to index+1
             order: m.order ?? (index + 1)
         }));
-    } catch (error) {
-        console.error('Failed to fetch members:', error);
+    } catch {
         return [];
     }
 }
@@ -87,8 +86,7 @@ export async function addMember(formData: FormData) {
         revalidatePath('/');
         revalidatePath('/admin');
         return { success: true };
-    } catch (error) {
-        console.error('Failed to add member:', error);
+    } catch {
         return { msg: 'Error al guardar en base de datos' };
     }
 }
@@ -236,7 +234,6 @@ export async function bulkAddMembers(textData: string) {
         }
         return { success: true, count };
     } catch (error) {
-        console.error('Failed to bulk add:', error);
         return { error: `Error en carga masiva: ${error instanceof Error ? error.message : String(error)}` };
     }
 }
@@ -255,8 +252,7 @@ export async function deleteAllMembers() {
         revalidatePath('/');
         revalidatePath('/admin');
         return { success: true };
-    } catch (error) {
-        console.error('Failed to delete all:', error);
+    } catch {
         return { error: 'Error al borrar todo' };
     }
 }
@@ -277,8 +273,7 @@ export async function toggleStatus(id: string, field: 'pagado' | 'recogido', cur
         revalidatePath('/');
         revalidatePath('/admin');
         return { success: true };
-    } catch (error) {
-        console.error(`Failed to toggle ${field}:`, error);
+    } catch {
         throw new Error(`Failed to toggle ${field}`);
     }
 }
@@ -289,8 +284,7 @@ export async function getAnnouncement() {
     try {
         const text = await redis.get(ANNOUNCEMENT_KEY);
         return text || '';
-    } catch (error) {
-        console.error('Failed to get announcement:', error);
+    } catch {
         return '';
     }
 }
@@ -305,8 +299,7 @@ export async function updateAnnouncement(text: string) {
         revalidatePath('/');
         revalidatePath('/admin');
         return { success: true };
-    } catch (error) {
-        console.error('Failed to update announcement:', error);
+    } catch {
         return { success: false, error: 'Error al actualizar el anuncio' };
     }
 }
@@ -345,7 +338,6 @@ export async function sendChatMessage(nombre: string, mensaje: string) {
         revalidatePath('/');
         return { success: true };
     } catch (e) {
-        console.error("Redis Error sendChatMessage:", e);
         throw e;
     }
 }
@@ -357,8 +349,7 @@ export async function getChatMessages(): Promise<ChatMessage[]> {
         const rawMsgs = await redis.lrange(CHAT_KEY, 0, 49);
         // They come out as strings, parse them
         return rawMsgs.map((s: string) => JSON.parse(s)) as ChatMessage[];
-    } catch (error) {
-        console.error("Error fetching chat:", error);
+    } catch {
         return [];
     }
 }

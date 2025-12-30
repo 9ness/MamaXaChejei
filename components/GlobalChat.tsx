@@ -16,12 +16,13 @@ interface ChatMessage {
     isAdminMessage?: boolean;
 }
 
-const REACTION_EMOJIS = ['❤️', '😂', '👍', '🔥', '🍺', '😮'];
+const REACTION_EMOJIS = ['😂', '❤️', '🔥', '🍻', '🥳', '💩'];
 
 export function GlobalChat() {
     const [isOpen, setIsOpen] = useState(false);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [pinnedMessage, setPinnedMessage] = useState<ChatMessage | null>(null);
+    const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
     const pathname = usePathname();
     const isAdmin = pathname === '/admin';
 
@@ -170,7 +171,7 @@ export function GlobalChat() {
                     <div className="p-3 bg-gradient-to-r from-indigo-600 to-purple-700 text-white flex justify-between items-center shadow-md z-10">
                         <div>
                             <h3 className="font-bold flex items-center gap-2">
-                                Muro Xa Chejei 🍻
+                                Chat Mamá Xa Chejei 🍻
                                 {isAdmin && <span className="text-[10px] bg-white/20 px-1.5 rounded text-white/90">ADMIN</span>}
                             </h3>
                             <p className="text-xs text-indigo-100 opacity-90">{headerStatus}</p>
@@ -217,8 +218,10 @@ export function GlobalChat() {
                                 const isMe = msg.nombre === userName || msg.nombre === `${userName} (Admin)`;
                                 const isAdminMsg = msg.isAdminMessage;
 
+                                // ... (rest of the code)
+
                                 return (
-                                    <div key={msg.id} id={`msg-${msg.id}`} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} group`}>
+                                    <div key={msg.id} id={`msg-${msg.id}`} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} group mb-4`}>
                                         {/* Controls for Admin */}
                                         {isAdmin && (
                                             <div className="flex gap-1 mb-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -228,7 +231,8 @@ export function GlobalChat() {
                                         )}
 
                                         <div
-                                            className={`relative p-2 rounded-xl text-sm max-w-[85%] shadow-sm flex flex-col gap-0.5
+                                            onClick={() => setActiveMessageId(activeMessageId === msg.id ? null : msg.id)}
+                                            className={`relative p-2 rounded-xl text-sm max-w-[85%] shadow-sm flex flex-col gap-0.5 cursor-pointer transition-all active:scale-[0.98]
                                                 ${isAdminMsg
                                                     ? 'bg-gradient-to-br from-amber-100 to-orange-100 border border-amber-300 text-amber-900'
                                                     : isMe
@@ -249,9 +253,9 @@ export function GlobalChat() {
                                                 </span>
                                             </div>
 
-                                            {/* Reactions Display */}
+                                            {/* Reactions Display (Count) */}
                                             {msg.reacciones && Object.entries(msg.reacciones).length > 0 && (
-                                                <div className="flex flex-wrap justify-end gap-1 mt-1 pt-1 border-t border-black/5">
+                                                <div className="flex flex-wrap justify-end gap-1 mt-1 mb-1 pt-1 border-t border-black/5">
                                                     {Object.entries(msg.reacciones).map(([emoji, count]) => (
                                                         <span key={emoji} className="text-[10px] bg-white/40 px-1 py-0.5 rounded-full shadow-sm border border-black/5 flex items-center gap-0.5 leading-none">
                                                             <span>{emoji}</span>
@@ -261,28 +265,26 @@ export function GlobalChat() {
                                                 </div>
                                             )}
 
-                                            {/* Reaction Picker with (+) */}
-                                            <div className={`absolute -bottom-8 ${isMe ? 'right-0 origin-top-right' : 'left-0 origin-top-left'} bg-white shadow-xl rounded-full px-2 py-1 opacity-0 group-hover:opacity-100 transition-all flex gap-1 border border-indigo-100 z-20 scale-90 hover:scale-100 whitespace-nowrap`}>
-                                                {REACTION_EMOJIS.map(emoji => (
-                                                    <button
-                                                        key={emoji}
-                                                        onClick={() => handleReact(msg.id, emoji)}
-                                                        className="hover:scale-125 transition-transform px-1 text-base leading-none"
-                                                    >
-                                                        {emoji}
-                                                    </button>
-                                                ))}
-                                                <button
-                                                    onClick={() => {
-                                                        const custom = prompt('Añade un emoji:');
-                                                        if (custom) handleReact(msg.id, custom);
-                                                    }}
-                                                    className="hover:scale-110 transition-transform px-1.5 ml-1 bg-indigo-50 rounded-full text-indigo-600 text-xs font-bold leading-none flex items-center justify-center border border-indigo-100"
-                                                    title="Añadir reacción personalizada"
-                                                >
-                                                    +
-                                                </button>
-                                            </div>
+                                            {/* Reaction Toolbar (Click Triggered) */}
+                                            {activeMessageId === msg.id && (
+                                                <div className={`absolute -bottom-10 z-20 flex animate-in zoom-in-50 duration-200 ${isMe ? 'right-0 origin-top-right' : 'left-0 origin-top-left'}`}>
+                                                    <div className="bg-white rounded-full shadow-xl border border-indigo-100 p-1 flex gap-1 items-center min-w-max">
+                                                        {REACTION_EMOJIS.map(emoji => (
+                                                            <button
+                                                                key={emoji}
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleReact(msg.id, emoji);
+                                                                    setActiveMessageId(null); // Close after react
+                                                                }}
+                                                                className="hover:scale-125 hover:bg-indigo-50 rounded-full w-8 h-8 flex items-center justify-center transition-all text-xl leading-none active:scale-95 flex-shrink-0"
+                                                            >
+                                                                {emoji}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 );
