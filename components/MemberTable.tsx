@@ -8,6 +8,7 @@ import {
     useReactTable,
     SortingState,
     ColumnFiltersState,
+    VisibilityState,
 } from "@tanstack/react-table";
 import {
     Table,
@@ -52,8 +53,9 @@ interface MemberTableProps {
 }
 
 export function MemberTable({ members, isAdmin, onToggle, isMobile = false }: MemberTableProps) {
-    const [sorting, setSorting] = useState<SortingState>([]);
+    const [sorting, setSorting] = useState<SortingState>([{ id: 'order', desc: false }]);
     const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+    const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({ order: false });
     const [alertOpen, setAlertOpen] = useState(false);
     const [pendingAction, setPendingAction] = useState<{ id: string, field: 'pagado' | 'recogido', val: boolean } | null>(null);
 
@@ -88,45 +90,50 @@ export function MemberTable({ members, isAdmin, onToggle, isMobile = false }: Me
                     <Button
                         variant="ghost"
                         onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-                        className="px-0 font-bold hover:bg-transparent"
+                        className="px-0 font-bold hover:bg-transparent text-[13px]"
                     >
                         Nombre
-                        <ArrowUpDown className="ml-2 h-4 w-4" />
+                        <ArrowUpDown className="ml-2 h-3 w-3" />
                     </Button>
                 );
             },
+            cell: ({ row }) => <span className="font-medium text-[13px]">{row.getValue("nombre")} <span className="text-muted-foreground font-normal text-[11px]">({row.original.order})</span></span>,
         },
         {
             accessorKey: "apellido1",
             header: ({ column }) => (
-                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="px-0 font-bold hover:bg-transparent">
-                    Primer Apellido <ArrowUpDown className="ml-2 h-4 w-4" />
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="px-0 font-bold hover:bg-transparent text-[13px]">
+                    1º Apellido <ArrowUpDown className="ml-2 h-3 w-3" />
                 </Button>
             ),
+            cell: ({ row }) => <span className="text-[13px]">{row.getValue("apellido1")}</span>,
         },
         {
             accessorKey: "apellido2",
             header: ({ column }) => (
-                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="px-0 font-bold hover:bg-transparent">
-                    Segundo Apellido <ArrowUpDown className="ml-2 h-4 w-4" />
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="px-0 font-bold hover:bg-transparent text-[13px]">
+                    2º Apellido <ArrowUpDown className="ml-2 h-3 w-3" />
                 </Button>
             ),
+            cell: ({ row }) => <span className="text-[13px]">{row.getValue("apellido2")}</span>,
         },
         {
             accessorKey: "talla",
             header: ({ column }) => (
-                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="px-0 font-bold hover:bg-transparent">
-                    Talla <ArrowUpDown className="ml-2 h-4 w-4" />
-                </Button>
+                <div className="w-[60px] text-center">
+                    <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="px-0 font-bold hover:bg-transparent text-[13px]">
+                        Talla <ArrowUpDown className="ml-1 h-3 w-3" />
+                    </Button>
+                </div>
             ),
-            cell: ({ row }) => <Badge variant="outline" className="font-mono">{row.getValue("talla")}</Badge>,
+            cell: ({ row }) => <div className="w-[60px] text-center"><Badge variant="outline" className="font-mono text-[11px] px-1 h-5">{row.getValue("talla")}</Badge></div>,
         },
         {
             accessorKey: "pagado",
             header: ({ column }) => (
-                <div className="text-center">
-                    <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="px-0 font-bold hover:bg-transparent">
-                        Pagado <ArrowUpDown className="ml-2 h-4 w-4" />
+                <div className="text-center w-[90px]">
+                    <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="px-0 font-bold hover:bg-transparent text-[13px]">
+                        Pagado <ArrowUpDown className="ml-1 h-3 w-3" />
                     </Button>
                 </div>
             ),
@@ -134,18 +141,18 @@ export function MemberTable({ members, isAdmin, onToggle, isMobile = false }: Me
                 const member = row.original;
                 const dateVal = member.fechaPagado;
                 return (
-                    <div className="flex flex-col items-center justify-center">
+                    <div className="flex flex-col items-center justify-center w-[90px]">
                         {isAdmin ? (
                             <>
                                 <Checkbox
                                     checked={member.pagado}
                                     onCheckedChange={() => handleCheckChange(member.id, 'pagado', member.pagado)}
-                                    className="data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600 w-5 h-5"
+                                    className="data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600 w-4 h-4"
                                 />
                                 {dateVal && (
                                     <div className="flex flex-col items-center mt-1">
                                         <span className="text-[10px] text-muted-foreground font-mono leading-none">
-                                            {new Date(dateVal).toLocaleDateString('es-ES')}
+                                            {new Date(dateVal).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}
                                         </span>
                                         <span className="text-[9px] text-muted-foreground/70 font-mono leading-none">
                                             {new Date(dateVal).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
@@ -164,19 +171,19 @@ export function MemberTable({ members, isAdmin, onToggle, isMobile = false }: Me
             accessorKey: "fechaPagado",
             header: ({ column }) => (
                 <div className="text-center">
-                    <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="px-0 font-bold hover:bg-transparent">
-                        Fecha Pago <ArrowUpDown className="ml-2 h-4 w-4" />
+                    <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="px-0 font-bold hover:bg-transparent text-[13px]">
+                        F. Pago <ArrowUpDown className="ml-1 h-3 w-3" />
                     </Button>
                 </div>
             ),
             cell: ({ row }) => {
                 const val = row.getValue("fechaPagado") as string;
                 return (
-                    <div className="text-center text-xs text-muted-foreground font-mono">
+                    <div className="text-center text-[11px] text-muted-foreground font-mono">
                         {val ? (
                             <div className="flex flex-col">
-                                <span>{new Date(val).toLocaleDateString('es-ES')}</span>
-                                <span className="text-[10px] opacity-70">{new Date(val).toLocaleTimeString('es-ES')}</span>
+                                <span>{new Date(val).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>
+                                <span className="text-[10px] opacity-70">{new Date(val).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</span>
                             </div>
                         ) : '-'}
                     </div>
@@ -186,9 +193,9 @@ export function MemberTable({ members, isAdmin, onToggle, isMobile = false }: Me
         {
             accessorKey: "recogido",
             header: ({ column }) => (
-                <div className="text-center">
-                    <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="px-0 font-bold hover:bg-transparent">
-                        Recogido <ArrowUpDown className="ml-2 h-4 w-4" />
+                <div className="text-center w-[90px]">
+                    <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="px-0 font-bold hover:bg-transparent text-[13px]">
+                        Recogido <ArrowUpDown className="ml-1 h-3 w-3" />
                     </Button>
                 </div>
             ),
@@ -196,18 +203,18 @@ export function MemberTable({ members, isAdmin, onToggle, isMobile = false }: Me
                 const member = row.original;
                 const dateVal = member.fechaRecogido;
                 return (
-                    <div className="flex flex-col items-center justify-center">
+                    <div className="flex flex-col items-center justify-center w-[90px]">
                         {isAdmin ? (
                             <>
                                 <Checkbox
                                     checked={member.recogido}
                                     onCheckedChange={() => handleCheckChange(member.id, 'recogido', member.recogido)}
-                                    className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600 w-5 h-5"
+                                    className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600 w-4 h-4"
                                 />
                                 {dateVal && (
                                     <div className="flex flex-col items-center mt-1">
                                         <span className="text-[10px] text-muted-foreground font-mono leading-none">
-                                            {new Date(dateVal).toLocaleDateString('es-ES')}
+                                            {new Date(dateVal).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}
                                         </span>
                                         <span className="text-[9px] text-muted-foreground/70 font-mono leading-none">
                                             {new Date(dateVal).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
@@ -226,24 +233,28 @@ export function MemberTable({ members, isAdmin, onToggle, isMobile = false }: Me
             accessorKey: "fechaRecogido",
             header: ({ column }) => (
                 <div className="text-center">
-                    <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="px-0 font-bold hover:bg-transparent">
-                        Fecha Recogida <ArrowUpDown className="ml-2 h-4 w-4" />
+                    <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="px-0 font-bold hover:bg-transparent text-[13px]">
+                        F. Recogida <ArrowUpDown className="ml-1 h-3 w-3" />
                     </Button>
                 </div>
             ),
             cell: ({ row }) => {
                 const val = row.getValue("fechaRecogido") as string;
                 return (
-                    <div className="text-center text-xs text-muted-foreground font-mono">
+                    <div className="text-center text-[11px] text-muted-foreground font-mono">
                         {val ? (
                             <div className="flex flex-col">
-                                <span>{new Date(val).toLocaleDateString('es-ES')}</span>
-                                <span className="text-[10px] opacity-70">{new Date(val).toLocaleTimeString('es-ES')}</span>
+                                <span>{new Date(val).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>
+                                <span className="text-[10px] opacity-70">{new Date(val).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</span>
                             </div>
                         ) : '-'}
                     </div>
                 )
             }
+        },
+        {
+            accessorKey: "order",
+            header: "Order",
         },
     ];
 
@@ -257,7 +268,7 @@ export function MemberTable({ members, isAdmin, onToggle, isMobile = false }: Me
             ),
             cell: ({ row }) => (
                 <div className="flex flex-col leading-tight max-w-[110px] overflow-hidden">
-                    <span className="font-bold text-xs truncate text-slate-900">{row.original.nombre}</span>
+                    <span className="font-bold text-xs truncate text-slate-900">{row.original.nombre} <span className="font-normal opacity-70 text-[10px]">({row.original.order})</span></span>
                     <span className="text-[10px] text-slate-500 truncate -mt-0.5">{row.original.apellido1}</span>
                     {row.original.apellido2 && <span className="text-[10px] text-slate-500 truncate -mt-0.5">{row.original.apellido2}</span>}
                 </div>
@@ -295,8 +306,8 @@ export function MemberTable({ members, isAdmin, onToggle, isMobile = false }: Me
                         )}
                         {(showDates && val) && (
                             <div className="flex flex-col items-center mt-0.5">
-                                <span className="text-[8px] text-slate-400 font-mono leading-none">{new Date(val).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}</span>
-                                <span className="text-[7px] text-slate-300 font-mono leading-none">{new Date(val).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</span>
+                                <span className="text-[8px] text-black font-bold font-mono leading-none">{new Date(val).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}</span>
+                                <span className="text-[7px] text-slate-600 font-mono leading-none">{new Date(val).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</span>
                             </div>
                         )}
                     </div>
@@ -326,13 +337,17 @@ export function MemberTable({ members, isAdmin, onToggle, isMobile = false }: Me
                         )}
                         {(showDates && val) && (
                             <div className="flex flex-col items-center mt-0.5">
-                                <span className="text-[8px] text-slate-400 font-mono leading-none">{new Date(val).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}</span>
-                                <span className="text-[7px] text-slate-300 font-mono leading-none">{new Date(val).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</span>
+                                <span className="text-[8px] text-black font-bold font-mono leading-none">{new Date(val).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}</span>
+                                <span className="text-[7px] text-slate-600 font-mono leading-none">{new Date(val).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</span>
                             </div>
                         )}
                     </div>
                 );
             },
+        },
+        {
+            accessorKey: "order",
+            header: "Order",
         },
     ];
 
@@ -364,9 +379,11 @@ export function MemberTable({ members, isAdmin, onToggle, isMobile = false }: Me
         getFilteredRowModel: getFilteredRowModel(),
         onSortingChange: setSorting,
         onColumnFiltersChange: setColumnFilters,
+        onColumnVisibilityChange: setColumnVisibility,
         state: {
             sorting,
             columnFilters,
+            columnVisibility,
         },
         initialState: {
             pagination: {
@@ -378,7 +395,7 @@ export function MemberTable({ members, isAdmin, onToggle, isMobile = false }: Me
 
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-4 w-full">
             {/* Toolbar Removed (Now in MemberList) */}
 
             <div className="rounded-md border">
@@ -388,7 +405,7 @@ export function MemberTable({ members, isAdmin, onToggle, isMobile = false }: Me
                             <TableRow key={headerGroup.id}>
                                 {headerGroup.headers.map((header) => {
                                     return (
-                                        <TableHead key={header.id}>
+                                        <TableHead key={header.id} className="px-2 h-9 text-[13px]">
                                             {header.isPlaceholder
                                                 ? null
                                                 : flexRender(
@@ -410,7 +427,7 @@ export function MemberTable({ members, isAdmin, onToggle, isMobile = false }: Me
                                     className={cn((row.original.pagado && row.original.recogido) && "bg-muted/20")}
                                 >
                                     {row.getVisibleCells().map((cell) => (
-                                        <TableCell key={cell.id}>
+                                        <TableCell key={cell.id} className="px-2 py-1 text-[13px]">
                                             {flexRender(
                                                 cell.column.columnDef.cell,
                                                 cell.getContext()

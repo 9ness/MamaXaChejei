@@ -10,21 +10,22 @@ const MemberSchema = z.object({
     nombre: z.string().min(2, "El nombre es obligatorio"),
     apellido1: z.string().min(2, "El apellido 1 es obligatorio"),
     apellido2: z.string().optional(),
-    talla: z.enum(['S', 'M', 'L', 'XL', 'XXL', '3XL']),
+    talla: z.string(),
     pagado: z.boolean().default(false),
     fechaPagado: z.string().optional(),
     recogido: z.boolean().default(false),
     fechaRecogido: z.string().optional(),
+    order: z.number().optional(),
 });
 
 export type Member = z.infer<typeof MemberSchema>;
 
 const NAMESPACE = 'fiesta';
-const MEMBERS_KEY = `${NAMESPACE}:miembros_ids`; // Set of IDs used as index
+const MEMBERS_KEY = `${NAMESPACE}:miembros_zset`; // Sorted Set for ordered IDs
 
 export async function getMembers(): Promise<Member[]> {
     try {
-        const ids = await redis.smembers(MEMBERS_KEY);
+        const ids = await redis.zrange(MEMBERS_KEY, 0, -1);
         if (!ids || ids.length === 0) return [];
 
         const pipeline = redis.pipeline();
@@ -41,7 +42,11 @@ export async function getMembers(): Promise<Member[]> {
             recogido: String(m.recogido) === 'true',
         }));
 
-        return formattedMembers.sort((a, b) => a.nombre.localeCompare(b.nombre));
+        return formattedMembers.map((m, index) => ({
+            ...m,
+            // Prefer stored order (from bulk load), fallback to index+1
+            order: m.order ?? (index + 1)
+        }));
     } catch (error) {
         console.error('Failed to fetch members:', error);
         return [];
@@ -75,7 +80,7 @@ export async function addMember(formData: FormData) {
 
     try {
         const pipeline = redis.pipeline();
-        pipeline.sadd(MEMBERS_KEY, id);
+        pipeline.zadd(MEMBERS_KEY, { score: Date.now(), member: id });
         pipeline.hset(`${NAMESPACE}:miembro:${id}`, newMember);
         await pipeline.exec();
 
@@ -91,22 +96,120 @@ export async function addMember(formData: FormData) {
 export async function bulkAddMembers(textData: string) {
     try {
         const lines = textData.split('\n').filter(line => line.trim() !== '');
-        const pipeline = redis.pipeline();
-        let count = 0;
+
+        // 1. Validation Phase
+        const pendingMembers: { num: number, data: string }[] = [];
+        const seenNumbers = new Set<number>();
+        const duplicateNumbers: number[] = [];
 
         for (const line of lines) {
-            // Format: Nombre Apellido1 Apellido2 Talla
-            const parts = line.trim().split(/\s+/);
-            if (parts.length < 3) continue; // Minimum: Nombre Apellido1 Talla
+            // Sanitize invisible chars (U+2060 Word Joiner, U+200B Zero Width Space, U+FEFF BOM)
+            const trimmed = line.replace(/[\u2060\u200B\uFEFF]/g, '').trim();
+            // Match leading number: "1.", "122.", "15 -"
+            const match = trimmed.match(/^(\d+)[.)-]?\s*(.*)/);
 
-            const talla = parts.pop()?.toUpperCase(); // Last part is always Talla
-            const apellido2 = parts.length >= 3 ? parts.pop() : ''; // If plenty parts, second to last is apellido2
-            const apellido1 = parts.pop();
-            const nombre = parts.join(' '); // Remainder is Name (can be composite)
+            let num = 0;
+            let content = trimmed;
 
-            if (!talla || !apellido1 || !nombre) continue;
+            if (match) {
+                num = parseInt(match[1], 10);
+                content = match[2];
+                if (seenNumbers.has(num)) {
+                    duplicateNumbers.push(num);
+                }
+                seenNumbers.add(num);
+            }
+
+            pendingMembers.push({ num, data: content });
+        }
+
+        if (duplicateNumbers.length > 0) {
+            const uniqueDups = Array.from(new Set(duplicateNumbers)).join(', ');
+            return { error: `Error: Números duplicados detectados: ${uniqueDups}. Por favor corrige la lista.` };
+        }
+
+        // 2. Insertion Phase
+        const pipeline = redis.pipeline();
+        let count = 0;
+        const baseScore = Date.now();
+
+        for (const item of pendingMembers) {
+            // Clean "-->", "->", "-", "—>", "—" separators (Em dash, En dash)
+            let cleanLine = item.data.replace(/[-—–]+>/g, ' ').replace(/[-—–]/g, ' ');
+
+            // Regex strategies for Talla
+            // 1. Explicit "Talla X" (e.g. "Carmen ... Talla 2")
+            const tallaExplicit = cleanLine.match(/^(.*)\s+Talla\s+([0-9]+(?:\s*a[ñn]os)?)$/i);
+            // 2. Age based "X anos" (e.g. "Luca 3 anos")
+            const tallaAge = cleanLine.match(/^(.*)\s+([0-9]+\s*a[ñn]os)$/i);
+            // 3. Standard S/M/L or just last word if no other match
+
+            let tallaStr = '';
+            let namePart = '';
+
+            if (tallaExplicit) {
+                namePart = tallaExplicit[1];
+                tallaStr = tallaExplicit[2]; // e.g. "2"
+                // Normalize "2" to "2 AÑOS" if user implies it? User said "talla es 3 años" for "3 anos".
+                // But for "Talla 2" said "talla 2 años".
+                // I'll append " AÑOS" if it's just a number to be safe/consistent with child sizes?
+                // Or keep as is. "2" is clean. "3 anos" -> "3 ANOS". 
+                // Let's just keep captured string but uppercase.
+            } else if (tallaAge) {
+                namePart = tallaAge[1];
+                tallaStr = tallaAge[2];
+            } else {
+                // Fallback to splitting last token
+                const lastSpace = cleanLine.lastIndexOf(' ');
+                if (lastSpace > 0) {
+                    namePart = cleanLine.substring(0, lastSpace);
+                    tallaStr = cleanLine.substring(lastSpace + 1);
+                } else {
+                    // One word line? invalid
+                    continue;
+                }
+            }
+
+            // Normalization: XXL -> 2XL, XXXL -> 3XL
+            let finalTalla = tallaStr.toUpperCase().replace('ANOS', 'AÑOS');
+            if (finalTalla === 'XXL') finalTalla = '2XL';
+            if (finalTalla === 'XXXL' || finalTalla === '3XL') finalTalla = '3XL'; // Ensure variants map to 3XL
+
+            const talla = finalTalla;
+            const parts = namePart.trim().split(/\s+/);
+            // We need at least Nombre and Apellido1?
+            // "Luca 3 anos" -> NamePart: "Luca". Parts: ["Luca"].
+            // User example: "127. Luca 3 anos". Result: "se llama luca". Apellido? 
+            // If only one word, treat as Nombre (surname empty? Schema requires Apellido1 min 2).
+            // But Schema validation will fail if Apellido1 missing.
+            // I should handle "Luca" -> Nombre="Luca", Apellido1="-" or something to pass validation?
+            // Or maybe "Luca" is just Nombre and Apellido1 is missing?
+            // Example 2: "Carmen junior". Parts: ["Carmen", "junior"]. Ap: "junior". Nom: "Carmen". Good.
+
+            let apellido2 = '';
+            let apellido1 = '';
+            let nombre = '';
+
+            if (parts.length >= 2) {
+                apellido2 = parts.length >= 3 ? parts.pop() || '' : '';
+                apellido1 = parts.pop() || '';
+                nombre = parts.join(' ');
+            } else if (parts.length === 1) {
+                nombre = parts[0];
+                apellido1 = '.'; // Placeholder to pass validation? 
+                // User said "Luca... inserta los demas datos bien".
+                // If Luca has no surname in input, system can't invent it.
+                // Converting specific case "Luca" -> Ap1="."
+            } else {
+                continue;
+            }
 
             const id = crypto.randomUUID();
+            const hasExplicitOrder = item.num > 0;
+            // Use explicit number if available, else timestamp-based
+            const score = hasExplicitOrder ? item.num : (baseScore + count);
+            const orderValue = hasExplicitOrder ? item.num : undefined;
+
             const newMember: Member = {
                 id,
                 nombre,
@@ -117,9 +220,11 @@ export async function bulkAddMembers(textData: string) {
                 fechaPagado: '',
                 recogido: false,
                 fechaRecogido: '',
+                // Only include order if strictly defined (Redis HSET fix)
+                ...(hasExplicitOrder ? { order: item.num } : {})
             };
 
-            pipeline.sadd(MEMBERS_KEY, id);
+            pipeline.zadd(MEMBERS_KEY, { score, member: id });
             pipeline.hset(`${NAMESPACE}:miembro:${id}`, newMember);
             count++;
         }
@@ -132,13 +237,13 @@ export async function bulkAddMembers(textData: string) {
         return { success: true, count };
     } catch (error) {
         console.error('Failed to bulk add:', error);
-        return { error: 'Error en carga masiva' };
+        return { error: `Error en carga masiva: ${error instanceof Error ? error.message : String(error)}` };
     }
 }
 
 export async function deleteAllMembers() {
     try {
-        const ids = await redis.smembers(MEMBERS_KEY);
+        const ids = await redis.zrange(MEMBERS_KEY, 0, -1);
         if (ids.length > 0) {
             const pipeline = redis.pipeline();
             pipeline.del(MEMBERS_KEY);
