@@ -1,7 +1,7 @@
 'use server';
 
 import { redis } from '@/lib/redis';
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, unstable_noStore as noStore } from 'next/cache';
 import { z } from 'zod';
 
 // Schema for Member validation
@@ -308,5 +308,57 @@ export async function updateAnnouncement(text: string) {
     } catch (error) {
         console.error('Failed to update announcement:', error);
         return { success: false, error: 'Error al actualizar el anuncio' };
+    }
+}
+
+// --- CHAT GLOBAL ACTIONS ---
+
+const CHAT_KEY = 'fiesta:chat';
+
+export interface ChatMessage {
+    id: string;
+    nombre: string;
+    mensaje: string;
+    fecha: number;
+}
+
+export async function sendChatMessage(nombre: string, mensaje: string) {
+    if (!nombre.trim() || !mensaje.trim()) return;
+
+    // Sanitize basic inputs
+    const safeNombre = nombre.slice(0, 30);
+    const safeMensaje = mensaje.slice(0, 500);
+
+    const msg: ChatMessage = {
+        id: crypto.randomUUID(),
+        nombre: safeNombre,
+        mensaje: safeMensaje,
+        fecha: Date.now()
+    };
+
+    try {
+        // LPUSH to start of list
+        await redis.lpush(CHAT_KEY, JSON.stringify(msg));
+        // LTRIM to keep only last 50 messages (indices 0 to 49)
+        await redis.ltrim(CHAT_KEY, 0, 49);
+
+        revalidatePath('/');
+        return { success: true };
+    } catch (e) {
+        console.error("Redis Error sendChatMessage:", e);
+        throw e;
+    }
+}
+
+export async function getChatMessages(): Promise<ChatMessage[]> {
+    noStore();
+    try {
+        // Get all messages (0 to 49 since we trim)
+        const rawMsgs = await redis.lrange(CHAT_KEY, 0, 49);
+        // They come out as strings, parse them
+        return rawMsgs.map((s: string) => JSON.parse(s)) as ChatMessage[];
+    } catch (error) {
+        console.error("Error fetching chat:", error);
+        return [];
     }
 }
