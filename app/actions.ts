@@ -353,3 +353,38 @@ export async function getChatMessages(): Promise<ChatMessage[]> {
         return [];
     }
 }
+
+// --- BEER GAME ACTIONS ---
+
+const HIGHSCORE_KEY = 'fiesta:highscore';
+
+export interface HighScore {
+    name: string;
+    score: number;
+}
+
+export async function getHighScore(): Promise<HighScore | null> {
+    noStore();
+    try {
+        const data = await redis.get(HIGHSCORE_KEY);
+        if (!data) return null;
+        return typeof data === 'object' ? data as HighScore : JSON.parse(data as string);
+    } catch {
+        return null;
+    }
+}
+
+export async function saveHighScore(name: string, score: number) {
+    try {
+        const current = await getHighScore();
+        if (!current || score > current.score) {
+            const newRecord: HighScore = { name: name.slice(0, 20), score };
+            await redis.set(HIGHSCORE_KEY, JSON.stringify(newRecord));
+            revalidatePath('/');
+            return { success: true, newRecord: true };
+        }
+        return { success: true, newRecord: false };
+    } catch {
+        return { success: false };
+    }
+}

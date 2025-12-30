@@ -5,6 +5,8 @@ import { MessageCircle, X, Send, Trash2, Pin, PinOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { usePathname } from 'next/navigation';
+import { BeerGame } from '@/components/BeerGame';
+import { HighScore, getHighScore } from '@/app/actions';
 
 interface ChatMessage {
     id: string;
@@ -23,6 +25,16 @@ export function GlobalChat() {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [pinnedMessage, setPinnedMessage] = useState<ChatMessage | null>(null);
     const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
+    const [showGame, setShowGame] = useState(false);
+    const [headerHighScore, setHeaderHighScore] = useState<HighScore | null>(null);
+
+    // Fetch HighScore on open
+    useEffect(() => {
+        if (isOpen) {
+            getHighScore().then(setHeaderHighScore);
+        }
+    }, [isOpen]);
+
     const pathname = usePathname();
     const isAdmin = pathname === '/admin';
 
@@ -168,18 +180,48 @@ export function GlobalChat() {
             {isOpen && (
                 <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[90vw] max-w-[380px] md:left-auto md:translate-x-0 md:bottom-6 md:right-6 md:w-[400px] h-[600px] max-h-[85vh] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col z-50 animate-in slide-in-from-bottom-5 overflow-hidden font-sans">
                     {/* Header */}
-                    <div className="p-3 bg-gradient-to-r from-indigo-600 to-purple-700 text-white flex justify-between items-center shadow-md z-10">
+                    <div className="p-3 bg-gradient-to-r from-indigo-600 to-purple-700 text-white flex justify-between items-center shadow-md z-10 shrink-0">
                         <div>
-                            <h3 className="font-bold flex items-center gap-2">
-                                Chat Mamá Xa Chejei 🍻
-                                {isAdmin && <span className="text-[10px] bg-white/20 px-1.5 rounded text-white/90">ADMIN</span>}
+                            <h3 className="font-bold flex items-center gap-2 text-sm">
+                                Chat Xa Chejei 🍻
+                                {isAdmin && <span className="text-[9px] bg-white/20 px-1 rounded">ADMIN</span>}
                             </h3>
-                            <p className="text-xs text-indigo-100 opacity-90">{headerStatus}</p>
+                            {headerHighScore ? (
+                                <button
+                                    onClick={() => setShowGame(true)}
+                                    className="text-[10px] bg-yellow-400 text-purple-900 px-1.5 py-0.5 rounded-full font-bold animate-pulse hover:scale-105 transition-transform mt-0.5"
+                                >
+                                    🎮 Récord: {headerHighScore.name} - {headerHighScore.score}
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={() => setShowGame(true)}
+                                    className="text-[10px] text-indigo-100 opacity-90 hover:text-white hover:underline mt-0.5 flex items-center gap-1"
+                                >
+                                    🎮 ¡Xogar a Atrapa a Cerveza!
+                                </button>
+                            )}
                         </div>
-                        <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)} className="hover:bg-white/10 rounded-full h-8 w-8 text-white">
-                            <X className="h-5 w-5" />
-                        </Button>
+                        <div className="flex gap-1">
+                            <Button variant="ghost" size="icon" onClick={() => setShowGame(true)} className="hover:bg-white/10 rounded-full h-8 w-8 text-white" title="Jugar">
+                                <span className="text-lg">🎮</span>
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)} className="hover:bg-white/10 rounded-full h-8 w-8 text-white">
+                                <X className="h-5 w-5" />
+                            </Button>
+                        </div>
                     </div>
+
+                    {/* Game Overlay */}
+                    {showGame && (
+                        <BeerGame
+                            playerName={userName || 'Anónimo'}
+                            onClose={() => {
+                                setShowGame(false);
+                                getHighScore().then(setHeaderHighScore); // Refresh record when closing
+                            }}
+                        />
+                    )}
 
                     {/* Pinned Message */}
                     {pinnedMessage && (
@@ -217,8 +259,6 @@ export function GlobalChat() {
                             optimisticMessages.map((msg) => {
                                 const isMe = msg.nombre === userName || msg.nombre === `${userName} (Admin)`;
                                 const isAdminMsg = msg.isAdminMessage;
-
-                                // ... (rest of the code)
 
                                 return (
                                     <div key={msg.id} id={`msg-${msg.id}`} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} group mb-4`}>
