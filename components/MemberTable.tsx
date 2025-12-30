@@ -341,13 +341,16 @@ export function MemberTable({ members, isAdmin, onToggle, isMobile = false }: Me
 
     // Filter visibility strictly based on requirements
     const columns = useMemo(() => {
-        return rawColumns.filter(col => {
+        return rawColumns.filter((col: any) => {
+            // Obtenemos el identificador de la columna de forma segura
+            const columnId = col.accessorKey || col.id;
+
             if (showDates) {
-                // If it IS admin path, we basically show everything that is defined in the sets
+                // Si es ruta admin, mostramos todo
                 return true;
             } else {
-                // If it is NOT admin path (Public), hide date columns
-                return col.accessorKey !== 'fechaPagado' && col.accessorKey !== 'fechaRecogido';
+                // Si es vista pública, ocultamos explícitamente las de fechas
+                return columnId !== 'fechaPagado' && columnId !== 'fechaRecogido';
             }
         });
     }, [isMobile, showDates, rawColumns]);
