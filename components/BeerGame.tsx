@@ -488,8 +488,8 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
                             <img src="/man_finish.png" alt="Drunk Finish" className="w-32 h-32 object-contain relative z-10 drop-shadow-2xl transform hover:scale-105 transition-transform" />
                         </div>
 
-                        <h2 className="text-5xl font-black text-white mb-1 drop-shadow-[0_5px_5px_rgba(0,0,0,0.5)]">GAME OVER</h2>
-                        <p className="text-red-200 font-bold mb-2">¡Te has pasado de copas!</p>
+                        <h2 className="text-5xl font-black text-white mb-1 drop-shadow-[0_5px_5px_rgba(0,0,0,0.5)]">A CA BOU SE!</h2>
+                        <p className="text-red-200 font-bold mb-2">¡Pasásteste de copas!</p>
 
                         <div className="flex flex-col items-center my-2 p-3 bg-white/5 rounded-3xl border border-white/10 w-full max-w-xs">
                             <span className="text-white/60 text-xs uppercase tracking-widest mb-1">Puntuación</span>
@@ -530,7 +530,7 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
                                     onClick={startGame}
                                     className="w-full bg-white text-red-900 hover:bg-slate-100 font-bold text-lg py-5 rounded-full shadow-2xl transition-transform active:scale-95"
                                 >
-                                    <RotateCcw className="mr-2 w-5 h-5" /> OTRA RONDA
+                                    <RotateCcw className="mr-2 w-5 h-5" /> OUTRA RONDA
                                 </Button>
                             )}
 
