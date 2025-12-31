@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { X, Trophy, Play, RotateCcw } from 'lucide-react';
+import { X, Trophy, Play, RotateCcw, Check, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import confetti from 'canvas-confetti';
 import { saveHighScore, getHighScore, HighScore, incrementTotalGames, getTotalGames } from '@/app/actions';
 
@@ -45,6 +46,7 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const flickerOverlayRef = useRef<HTMLDivElement>(null);
     const sceneRef = useRef<HTMLDivElement>(null); // Inner scene wrapper for rotation/blur
+    const itemRefs = useRef<Map<number, HTMLDivElement>>(new Map()); // Direct item access
 
     // Timers & Loop
     const requestRef = useRef<number>(0);
@@ -59,6 +61,11 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
     const [isNewRecord, setIsNewRecord] = useState(false);
     const [isDrinking, setIsDrinking] = useState(false);
     const [totalGames, setTotalGames] = useState(0);
+
+    // Name Entry State
+    const [showNameInput, setShowNameInput] = useState(false);
+    const [nameInput, setNameInput] = useState('');
+    const [pendingScore, setPendingScore] = useState(0);
 
     // Constants
     const BASE_SPEED = 0.25;
@@ -155,6 +162,7 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
         }
 
         // --- 4. Physics & Collisions ---
+        // --- 4. Physics & Collisions ---
         const curPlayerX = playerXRef.current;
         const playerLeft = curPlayerX - hitBoxHalfWidth;
         const playerRight = curPlayerX + hitBoxHalfWidth;
@@ -163,6 +171,7 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
         let caughtPoints = 0;
         const nextItems: Item[] = [];
 
+        // Logic Loop
         for (const item of itemsRef.current) {
             const newY = item.y + (item.speed * delta * 0.1);
             const wobbleMultiplier = 1 + (currentScore * 0.05);
@@ -170,7 +179,7 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
             const newX = item.x + (wave * 0.4 * delta * 0.05 * wobbleMultiplier);
             const clampedX = Math.max(2, Math.min(98, newX));
 
-            // Catch Zone: Y 75-88
+            // Catch Zone
             if (newY > 75 && newY < 88) {
                 if (clampedX > playerLeft && clampedX < playerRight) {
                     caughtPoints++;
@@ -178,12 +187,22 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
                 }
             }
 
-            // Miss Condition (Hits Bar at 88)
+            // Miss Condition
             if (newY >= 88) {
                 missed = true;
                 break;
             } else {
-                nextItems.push({ ...item, y: newY, x: clampedX, speed: item.speed });
+                // Keep item
+                const updatedItem = { ...item, y: newY, x: clampedX };
+                nextItems.push(updatedItem);
+
+                // DIRECT DOM UPDATE (Performance Fix)
+                // We bypass React state for pure movement to avoid Re-Renders
+                const el = itemRefs.current.get(item.id);
+                if (el) {
+                    el.style.left = `${clampedX}%`;
+                    el.style.top = `${newY}%`;
+                }
             }
         }
 
@@ -191,7 +210,9 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
         if (missed) {
             handleGameOver();
         } else {
+            // Update Source of Truth
             itemsRef.current = nextItems;
+
             if (caughtPoints > 0) {
                 scoreRef.current += caughtPoints;
                 // Trigger Drinking
@@ -204,12 +225,20 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
                 }
             }
 
-            setGameState({
-                items: nextItems,
-                score: scoreRef.current,
-                gameOver: false,
-                isPlaying: true
-            });
+            // OPTIMIZATION: Only triggering React Render if strictly necessary
+            // 1. Score changed (visual update of HUD / Sprite)
+            // 2. Items added/removed (DOM Topology change)
+            // 3. Game Over (Handled above)
+            const shouldRender = caughtPoints > 0 || nextItems.length !== gameState.items.length;
+
+            if (shouldRender) {
+                setGameState({
+                    items: nextItems,
+                    score: scoreRef.current,
+                    gameOver: false,
+                    isPlaying: true
+                });
+            }
         }
     };
 
@@ -247,24 +276,53 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
         requestRef.current = requestAnimationFrame(animate);
     };
 
-    const handleGameOver = () => {
+    const handleGameOver = async () => {
         isPlayingRef.current = false;
         if (requestRef.current) cancelAnimationFrame(requestRef.current);
 
-        saveHighScore(playerName, scoreRef.current).then((res) => {
-            if (res.newRecord) {
-                setIsNewRecord(true);
-                confetti({
-                    particleCount: 200,
-                    spread: 100,
-                    origin: { y: 0.6 },
-                    colors: ['#FFD700', '#FFA500', '#FFFFFF', '#FF4500']
-                });
-                getHighScore().then(setHighScore);
-            }
-        });
+        const score = scoreRef.current;
+        const currentRecord = await getHighScore();
+        const isRecord = !currentRecord || score > currentRecord.score;
+
+        // Anónimo Check: If record & anonymous -> Prompt Name
+        if (isRecord && (playerName === 'Anónimo' || !playerName)) {
+            setIsNewRecord(true);
+            setPendingScore(score);
+            setShowNameInput(true);
+            setNameInput('');
+
+            // Celebration
+            confetti({
+                particleCount: 200,
+                spread: 100,
+                origin: { y: 0.6 },
+                colors: ['#FFD700', '#FFA500', '#FFFFFF', '#FF4500']
+            });
+        } else {
+            // Standard Save
+            saveHighScore(playerName, score).then((res) => {
+                if (res.newRecord) {
+                    setIsNewRecord(true);
+                    confetti({
+                        particleCount: 200,
+                        spread: 100,
+                        origin: { y: 0.6 },
+                        colors: ['#FFD700', '#FFA500', '#FFFFFF', '#FF4500']
+                    });
+                    getHighScore().then(setHighScore);
+                }
+            });
+        }
 
         setGameState(prev => ({ ...prev, gameOver: true, isPlaying: false }));
+    };
+
+    const saveNamedRecord = () => {
+        const nameToSave = nameInput.trim() || 'Anónimo';
+        saveHighScore(nameToSave, pendingScore).then(() => {
+            setShowNameInput(false);
+            getHighScore().then(setHighScore);
+        });
     };
 
     const handleTouchMove = (e: React.TouchEvent | React.MouseEvent) => {
@@ -298,6 +356,19 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
 
     const currentSprite = getHeroSprite(currentScore, isDrinking);
 
+    // Preload Asssets
+    useEffect(() => {
+        const assets = [
+            '/man1.png', '/man2.png', '/man3.png',
+            '/man1_drunk.png', '/man2_drunk.png', '/man3_drunk.png',
+            '/man_finish.png'
+        ];
+        assets.forEach(src => {
+            const img = new Image();
+            img.src = src;
+        });
+    }, []);
+
     return (
         <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-black/90">
             <div ref={flickerOverlayRef} className="fixed inset-0 bg-black z-[70] pointer-events-none opacity-0 transition-opacity duration-200 ease-in-out" />
@@ -323,7 +394,11 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
                     {gameState.items.map(item => (
                         <div
                             key={item.id}
-                            className="absolute -translate-x-1/2 text-4xl pointer-events-none drop-shadow-lg z-10"
+                            ref={(el) => {
+                                if (el) itemRefs.current.set(item.id, el);
+                                else itemRefs.current.delete(item.id);
+                            }}
+                            className="absolute -translate-x-1/2 text-4xl pointer-events-none drop-shadow-lg z-10 will-change-transform"
                             style={{ left: `${item.x}%`, top: `${item.y}%`, transition: 'none' }}
                         >
                             {item.emoji}
@@ -425,18 +500,48 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
                             <div className="mb-4 bg-gradient-to-r from-yellow-400 to-orange-500 text-white p-2 px-4 rounded-xl shadow-[0_0_30px_rgba(255,215,0,0.6)] animate-pulse font-black text-md flex items-center gap-2 transform rotate-1">
                                 🏆 ¡NOVO RÉCORD! 🏆
                             </div>
+
                         )}
 
                         <div className="flex flex-col gap-2 w-full max-w-[220px] mt-1">
-                            <Button
-                                onClick={startGame}
-                                className="w-full bg-white text-red-900 hover:bg-slate-100 font-bold text-lg py-5 rounded-full shadow-2xl transition-transform active:scale-95"
-                            >
-                                <RotateCcw className="mr-2 w-5 h-5" /> OTRA RONDA
-                            </Button>
+                            {/* Name Input for Record */}
+                            {showNameInput ? (
+                                <div className="animate-in fade-in slide-in-from-bottom-2 w-full mb-2">
+                                    <p className="text-yellow-200 text-xs mb-1 font-bold">¡Garda o teu récord!</p>
+                                    <div className="flex gap-2">
+                                        <Input
+                                            value={nameInput}
+                                            onChange={(e) => setNameInput(e.target.value)}
+                                            placeholder="Nome..."
+                                            className="bg-white/10 border-white/20 text-white placeholder:text-white/50 h-10"
+                                            maxLength={15}
+                                        />
+                                        <Button
+                                            size="icon"
+                                            onClick={saveNamedRecord}
+                                            className="bg-green-600 hover:bg-green-700 h-10 w-10 shrink-0"
+                                        >
+                                            <Save className="w-4 h-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <Button
+                                    onClick={startGame}
+                                    className="w-full bg-white text-red-900 hover:bg-slate-100 font-bold text-lg py-5 rounded-full shadow-2xl transition-transform active:scale-95"
+                                >
+                                    <RotateCcw className="mr-2 w-5 h-5" /> OTRA RONDA
+                                </Button>
+                            )}
 
                             <Button
-                                onClick={onClose}
+                                onClick={() => {
+                                    // If pending record, save as Anónimo on exit?
+                                    if (showNameInput) {
+                                        saveHighScore('Anónimo', pendingScore);
+                                    }
+                                    onClose();
+                                }}
                                 className="w-full bg-red-800 text-white hover:bg-red-700 font-bold text-md py-5 rounded-full shadow-lg border-2 border-white/20 transition-transform active:scale-95"
                             >
                                 <X className="mr-2 w-4 h-4" /> SALIR
@@ -445,6 +550,6 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
                     </div>
                 )}
             </div>
-        </div>
+        </div >
     );
 }

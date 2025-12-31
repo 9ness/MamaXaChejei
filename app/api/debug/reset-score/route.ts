@@ -8,7 +8,7 @@ export async function GET() {
         console.log('API Reset: Deleting fiesta:highscore');
         await redis.del('fiesta:highscore');
 
-        // Optional: Force set to 0 to be sure
+        // Force set to 0
         const zeroRecord = { name: 'Nadie', score: 0 };
         await redis.set('fiesta:highscore', JSON.stringify(zeroRecord));
 

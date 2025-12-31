@@ -376,15 +376,40 @@ export async function getHighScore(): Promise<HighScore | null> {
 
 export async function saveHighScore(name: string, score: number) {
     try {
-        const current = await getHighScore();
-        if (!current || score > current.score) {
-            const newRecord: HighScore = { name: name.slice(0, 20), score };
-            await redis.set(HIGHSCORE_KEY, JSON.stringify(newRecord));
+        // Atomic Lua script to prevent race conditions
+        // logic: fetch current -> decode -> compare -> set if higher
+        const script = `
+            local key = KEYS[1]
+            local newScore = tonumber(ARGV[1])
+            local newName = ARGV[2]
+
+            local currentData = redis.call('get', key)
+            local currentScore = 0
+
+            if currentData then
+                local decoded = cjson.decode(currentData)
+                currentScore = tonumber(decoded.score) or 0
+            end
+
+            if newScore > currentScore then
+                local newData = cjson.encode({name = newName, score = newScore})
+                redis.call('set', key, newData)
+                return 1
+            else
+                return 0
+            end
+        `;
+
+        const result = await redis.eval(script, [HIGHSCORE_KEY], [score, name.slice(0, 20)]);
+        const isNewRecord = result === 1;
+
+        if (isNewRecord) {
             revalidatePath('/');
-            return { success: true, newRecord: true };
         }
-        return { success: true, newRecord: false };
-    } catch {
+
+        return { success: true, newRecord: isNewRecord };
+    } catch (e) {
+        console.error('Error saving high score:', e);
         return { success: false };
     }
 }

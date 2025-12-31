@@ -29,11 +29,17 @@ export function GlobalChat() {
     const [headerHighScore, setHeaderHighScore] = useState<HighScore | null>(null);
     const [totalGames, setTotalGames] = useState(0);
 
-    // Fetch HighScore & TotalGames on open
+    // Fetch HighScore & TotalGames on open and poll
     useEffect(() => {
         if (isOpen) {
-            getHighScore().then(setHeaderHighScore);
-            getTotalGames().then(setTotalGames);
+            const fetchData = () => {
+                getHighScore().then(setHeaderHighScore);
+                getTotalGames().then(setTotalGames);
+            };
+
+            fetchData();
+            const interval = setInterval(fetchData, 10000); // 10s polling
+            return () => clearInterval(interval);
         }
     }, [isOpen]);
 
@@ -377,7 +383,7 @@ export function GlobalChat() {
 
                     {/* Input */}
                     <div className="p-3 bg-white border-t space-y-2 shrink-0">
-                        {!userName && <p className="text-xs text-orange-600 bg-orange-50 p-2 rounded">¡Ponte nombre para hablar!</p>}
+                        {!userName && <p className="text-xs text-orange-600 bg-orange-50 p-2 rounded">¡Ponte nome para falar!</p>}
                         <div className="flex gap-2">
                             <Input
                                 placeholder="Tu Nombre"
