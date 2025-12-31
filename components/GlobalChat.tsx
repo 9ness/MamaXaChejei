@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useEffect, useRef, useOptimistic, startTransition } from 'react';
-import { MessageCircle, X, Send, Trash2, Pin, PinOff } from 'lucide-react';
+import { MessageCircle, X, Send, Trash2, Pin, PinOff, ArrowDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { usePathname } from 'next/navigation';
 import { BeerGame } from '@/components/BeerGame';
-import { HighScore, getHighScore } from '@/app/actions';
+import { HighScore, getHighScore, getTotalGames } from '@/app/actions';
 
 interface ChatMessage {
     id: string;
@@ -27,11 +27,13 @@ export function GlobalChat() {
     const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
     const [showGame, setShowGame] = useState(false);
     const [headerHighScore, setHeaderHighScore] = useState<HighScore | null>(null);
+    const [totalGames, setTotalGames] = useState(0);
 
-    // Fetch HighScore on open
+    // Fetch HighScore & TotalGames on open
     useEffect(() => {
         if (isOpen) {
             getHighScore().then(setHeaderHighScore);
+            getTotalGames().then(setTotalGames);
         }
     }, [isOpen]);
 
@@ -60,8 +62,12 @@ export function GlobalChat() {
     const [newMessage, setNewMessage] = useState('');
     const [userName, setUserName] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [showScrollButton, setShowScrollButton] = useState(false);
+
+    // Refs
     const scrollRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    const isUserScrolledUp = useRef(false);
 
     // Initial load and polling
     useEffect(() => {
@@ -144,27 +150,51 @@ export function GlobalChat() {
         });
     };
 
-    const scrollToBottom = () => {
-        if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    const handleScroll = () => {
+        if (!scrollRef.current) return;
+        const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+        const isAtBottom = scrollHeight - scrollTop - clientHeight < 100; // 100px threshold
+
+        isUserScrolledUp.current = !isAtBottom;
+        setShowScrollButton(!isAtBottom);
     };
 
+    const scrollToBottom = (force = false) => {
+        if (scrollRef.current) {
+            if (force || !isUserScrolledUp.current) {
+                scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+            }
+        }
+    };
+
+    // Auto-scroll on new messages (conditional)
     useEffect(() => {
         scrollToBottom();
-    }, [optimisticMessages, isOpen]);
+    }, [optimisticMessages]);
+
+    // Force scroll on open
+    useEffect(() => {
+        if (isOpen) {
+            isUserScrolledUp.current = false;
+            setShowScrollButton(false);
+            // Small timeout to ensure render
+            setTimeout(() => scrollToBottom(true), 10);
+        }
+    }, [isOpen]);
 
     // Helper for relative time
     const getRelativeTime = (timestamp: number) => {
         const diff = Date.now() - timestamp;
         const mins = Math.floor(diff / 60000);
-        if (mins < 1) return 'Ahora mismo';
-        if (mins < 60) return `Hace ${mins} min`;
+        if (mins < 1) return 'Agora mesmo';
+        if (mins < 60) return `Fai ${mins} min`;
         const hours = Math.floor(mins / 60);
-        if (hours < 24) return `Hace ${hours} h`;
+        if (hours < 24) return `Fai ${hours} h`;
         return new Date(timestamp).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' });
     };
 
     const lastMessageTime = messages.length > 0 ? messages[messages.length - 1].fecha : 0;
-    const headerStatus = messages.length === 0 ? 'Sin mensajes' : `Último mensaje: ${getRelativeTime(lastMessageTime)}`;
+    const headerStatus = messages.length === 0 ? 'Sin mensaxes' : `Último mensaxe: ${getRelativeTime(lastMessageTime)}`;
 
     return (
         <>
@@ -183,33 +213,31 @@ export function GlobalChat() {
                     <div className="p-3 bg-gradient-to-r from-indigo-600 to-purple-700 text-white flex justify-between items-center shadow-md z-10 shrink-0">
                         <div>
                             <h3 className="font-bold flex items-center gap-2 text-sm">
-                                Chat Xa Chejei 🍻
+                                Mamá, xa chejei. 🍻🙅‍♀️💁‍♀️🎉
                                 {isAdmin && <span className="text-[9px] bg-white/20 px-1 rounded">ADMIN</span>}
                             </h3>
-                            {headerHighScore ? (
-                                <button
-                                    onClick={() => setShowGame(true)}
-                                    className="text-[10px] bg-yellow-400 text-purple-900 px-1.5 py-0.5 rounded-full font-bold animate-pulse hover:scale-105 transition-transform mt-0.5"
-                                >
-                                    🎮 Récord: {headerHighScore.name} - {headerHighScore.score}
-                                </button>
-                            ) : (
-                                <button
-                                    onClick={() => setShowGame(true)}
-                                    className="text-[10px] text-indigo-100 opacity-90 hover:text-white hover:underline mt-0.5 flex items-center gap-1"
-                                >
-                                    🎮 ¡Xogar a Atrapa a Cerveza!
-                                </button>
-                            )}
+                            <div className="flex flex-wrap gap-2 mt-1 items-center">
+                                {headerHighScore && (
+                                    <div className="text-[10px] bg-yellow-400 text-purple-900 px-2 py-0.5 rounded-full font-bold shadow-sm cursor-default">
+                                        👑 Récord: {headerHighScore.name} - {headerHighScore.score}
+                                    </div>
+                                )}
+                                <div className="text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded-full font-bold shadow-sm flex items-center gap-1 border border-emerald-400 cursor-default">
+                                    <span className="text-lg leading-none"></span> {totalGames} veces xogado
+                                </div>
+                            </div>
+                            <div className="text-[10px] bg-white/10 mt-2 px-2 py-0.5 rounded text-white/90 w-fit font-medium">
+                                {headerStatus}
+                            </div>
                         </div>
-                        <div className="flex gap-1">
-                            <Button variant="ghost" size="icon" onClick={() => setShowGame(true)} className="hover:bg-white/10 rounded-full h-8 w-8 text-white" title="Jugar">
-                                <span className="text-lg">🎮</span>
-                            </Button>
-                            <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)} className="hover:bg-white/10 rounded-full h-8 w-8 text-white">
-                                <X className="h-5 w-5" />
-                            </Button>
-                        </div>
+                    </div>
+                    <div className="absolute top-1 right-3 flex gap-1 z-20">
+                        <Button variant="ghost" size="icon" onClick={() => setShowGame(true)} className="hover:bg-white/10 rounded-full h-8 w-8 text-white" title="Jugar">
+                            <span className="text-lg">🎮</span>
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)} className="hover:bg-white/10 rounded-full h-8 w-8 text-white">
+                            <X className="h-5 w-5" />
+                        </Button>
                     </div>
 
                     {/* Game Overlay */}
@@ -249,7 +277,11 @@ export function GlobalChat() {
                     )}
 
                     {/* Messages */}
-                    <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#e4ddd6] bg-opacity-30 scroll-smooth">
+                    <div
+                        ref={scrollRef}
+                        onScroll={handleScroll}
+                        className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#e4ddd6] bg-opacity-30 scroll-smooth relative"
+                    >
                         {optimisticMessages.length === 0 ? (
                             <div className="text-center text-slate-400 py-10 opacity-70">
                                 <MessageCircle className="h-12 w-12 mx-auto mb-2 opacity-50" />
@@ -330,6 +362,17 @@ export function GlobalChat() {
                                 );
                             })
                         )}
+
+                        {/* Scroll To Bottom Button */}
+                        {showScrollButton && (
+                            <Button
+                                onClick={() => scrollToBottom(true)}
+                                className="fixed bottom-24 right-8 z-50 rounded-full h-10 w-10 bg-indigo-600 hover:bg-indigo-700 shadow-lg animate-in zoom-in"
+                                size="icon"
+                            >
+                                <ArrowDown className="h-5 w-5 text-white" />
+                            </Button>
+                        )}
                     </div>
 
                     {/* Input */}
@@ -363,8 +406,9 @@ export function GlobalChat() {
                             </form>
                         </div>
                     </div>
-                </div>
-            )}
+                </div >
+            )
+            }
         </>
     );
 }

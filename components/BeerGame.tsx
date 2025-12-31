@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { X, Trophy, Play, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import confetti from 'canvas-confetti';
-import { saveHighScore, getHighScore, HighScore } from '@/app/actions';
+import { saveHighScore, getHighScore, HighScore, incrementTotalGames, getTotalGames } from '@/app/actions';
 
 interface BeerGameProps {
     playerName: string;
@@ -22,7 +22,7 @@ interface Item {
 const backgroundStyle = "bg-gradient-to-b from-[#1a1c2c] via-[#4a2448] to-[#9d303b]";
 
 export function BeerGame({ playerName, onClose }: BeerGameProps) {
-    // UI State (for rendering only)
+    // UI State (rendering minimal updates)
     const [gameState, setGameState] = useState<{
         items: Item[];
         score: number;
@@ -35,26 +35,42 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
         isPlaying: false
     });
 
-    // Logic Refs (Source of Truth)
+    // Validated Refs (Game Loop Source of Truth)
     const itemsRef = useRef<Item[]>([]);
     const scoreRef = useRef(0);
     const isPlayingRef = useRef(false);
     const playerXRef = useRef(50);
 
+    // Visual Refs for Direct DOM Manipulation (60fps perf)
+    const containerRef = useRef<HTMLDivElement>(null);
+    const flickerOverlayRef = useRef<HTMLDivElement>(null);
+    const sceneRef = useRef<HTMLDivElement>(null); // Inner scene wrapper for rotation/blur
+
     // Timers & Loop
     const requestRef = useRef<number>(0);
     const lastTimeRef = useRef<number>(0);
     const spawnTimerRef = useRef<number>(0);
+    const nextBlinkTimeRef = useRef<number>(0); // For natural blinking
+
+    // Animation Refs
+    const drinkingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
     const [highScore, setHighScore] = useState<HighScore | null>(null);
     const [isNewRecord, setIsNewRecord] = useState(false);
-    const containerRef = useRef<HTMLDivElement>(null);
+    const [isDrinking, setIsDrinking] = useState(false);
+    const [totalGames, setTotalGames] = useState(0);
+
+    // Constants
+    const BASE_SPEED = 0.25;
+    const BASE_BASKET_WIDTH = 20;
 
     // Initial Load
     useEffect(() => {
         getHighScore().then(setHighScore);
+        getTotalGames().then(setTotalGames);
         return () => {
             if (requestRef.current) cancelAnimationFrame(requestRef.current);
+            if (drinkingTimerRef.current) clearTimeout(drinkingTimerRef.current);
         };
     }, []);
 
@@ -64,92 +80,132 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
         lastTimeRef.current = time;
 
         if (isPlayingRef.current) {
-            updateGameLogic(deltaTime);
+            updateGameLogic(deltaTime, time);
             requestRef.current = requestAnimationFrame(animate);
         }
     };
 
-    const updateGameLogic = (delta: number) => {
-        // 1. Difficulty: Aggressive Scaling
-        // Difficulty increases 10% per point instead of 5%
+    const updateGameLogic = (delta: number, totalTime: number) => {
         const currentScore = scoreRef.current;
-        const currentDifficulty = 1 + (currentScore * 0.12); // Faster ramp-up
 
-        // 2. Spawn System
+        // --- 1. Math & Difficulty ---
+        const currentSpeed = BASE_SPEED + (currentScore * 0.15);
+        const spawnRate = Math.max(400, 1000 - (currentScore * 25));
+
+        // Dynamic Width
+        const shrinkFactor = Math.max(0.3, 1 - (currentScore * 0.015));
+        const currentBasketWidth = BASE_BASKET_WIDTH * shrinkFactor;
+        const hitBoxHalfWidth = currentBasketWidth / 2;
+
+        // --- 2. Visual Effects (Direct DOM) ---
+        if (sceneRef.current && flickerOverlayRef.current) {
+            // A. Oscillating Blur (Focus/Unfocus)
+            // "Breathe" factor: 0.2 to 1.0 sine wave
+            const breathe = 0.6 + 0.4 * Math.sin(totalTime * 0.003);
+            const baseBlur = currentScore * 0.25;
+            const blurAmount = baseBlur * breathe;
+
+            // Rotation (Dizziness)
+            const maxRotation = currentScore * 0.4;
+            const sway = Math.sin(totalTime * 0.002) * maxRotation;
+
+            let scale = 1;
+            if (currentScore >= 15) {
+                const pulse = Math.sin(totalTime * 0.01);
+                const intensity = (currentScore - 14) * 0.02;
+                scale = 1 + (pulse * intensity);
+            }
+
+            sceneRef.current.style.filter = `blur(${blurAmount}px)`;
+            sceneRef.current.style.transform = `rotate(${sway}deg) scale(${scale})`;
+
+            // C. Natural Blink (Slow Blink)
+            // Start blinking after 5 points
+            if (currentScore >= 5) {
+                if (totalTime > nextBlinkTimeRef.current) {
+                    // Trigger Blink (Close Eyes)
+                    flickerOverlayRef.current.style.opacity = '0.95';
+
+                    // Schedule "Open Eyes"
+                    const blinkDuration = Math.random() * 200 + 150; // 150-350ms blink
+                    setTimeout(() => {
+                        if (flickerOverlayRef.current) flickerOverlayRef.current.style.opacity = '0';
+                    }, blinkDuration);
+
+                    // Schedule Next Blink
+                    // Higher score = more frequent blinking (drowsiness)
+                    const baseInterval = Math.max(1000, 5000 - (currentScore * 200));
+                    const variance = Math.random() * 2000;
+                    nextBlinkTimeRef.current = totalTime + baseInterval + variance;
+                }
+            }
+        }
+
+        // --- 3. Spawn System ---
         spawnTimerRef.current += delta;
-        // Cap spawn rate at 400ms min to avoid impossible overlap, start at 1000ms
-        const spawnRate = Math.max(450, 1000 - (currentDifficulty * 60));
-
         if (spawnTimerRef.current > spawnRate) {
-            // Prevent spawning too close to edges due to zigzag
             itemsRef.current.push({
                 id: Date.now() + Math.random(),
-                x: Math.random() * 70 + 15, // 15% - 85% bounds
+                x: Math.random() * 80 + 10,
                 y: -15,
-                speed: 0.25 + (currentDifficulty * 0.05), // Higher base speed + faster growth
+                speed: currentSpeed,
                 emoji: Math.random() > 0.5 ? '🍺' : '🍻'
             });
             spawnTimerRef.current = 0;
         }
 
-        // 3. Move & Collision
+        // --- 4. Physics & Collisions ---
         const curPlayerX = playerXRef.current;
-        const playerLeft = curPlayerX - 10;
-        const playerRight = curPlayerX + 10;
+        const playerLeft = curPlayerX - hitBoxHalfWidth;
+        const playerRight = curPlayerX + hitBoxHalfWidth;
 
         let missed = false;
         let caughtPoints = 0;
         const nextItems: Item[] = [];
 
-        // Add zigzag phase ref or property if complex, but simple version:
-        // Use item ID or Y to determine phase
-        const timeFactor = Date.now() / 200; // time base for wave
-
         for (const item of itemsRef.current) {
-            // Vertical Move
-            const newY = item.y + (item.speed * delta * 0.15);
-
-            // Horizontal ZigZag "Drunk" Movement
-            // Sine wave based on Item ID (random phase) and Y position
+            const newY = item.y + (item.speed * delta * 0.1);
+            const wobbleMultiplier = 1 + (currentScore * 0.05);
             const wave = Math.sin((newY * 0.1) + (item.id % 100));
-            const horizontalShift = wave * 0.4 * delta * 0.1; // Amplitude adjusted
-            let newX = item.x + horizontalShift;
+            const newX = item.x + (wave * 0.4 * delta * 0.05 * wobbleMultiplier);
+            const clampedX = Math.max(2, Math.min(98, newX));
 
-            // Wall Clamp
-            if (newX < 5) newX = 5;
-            if (newX > 95) newX = 95;
-
-            // Check Catch
-            if (newY > 80 && newY < 95) {
-                if (newX > playerLeft && newX < playerRight) {
+            // Catch Zone: Y 75-88
+            if (newY > 75 && newY < 88) {
+                if (clampedX > playerLeft && clampedX < playerRight) {
                     caughtPoints++;
                     continue; // Caught
                 }
             }
 
-            // Check Miss
-            if (newY >= 100) {
+            // Miss Condition (Hits Bar at 88)
+            if (newY >= 88) {
                 missed = true;
                 break;
             } else {
-                item.y = newY;
-                item.x = newX; // Update X too
-                nextItems.push({ ...item, y: newY, x: newX });
+                nextItems.push({ ...item, y: newY, x: clampedX, speed: item.speed });
             }
         }
 
-        // 4. Update State
+        // --- 5. Outcome ---
         if (missed) {
             handleGameOver();
         } else {
             itemsRef.current = nextItems;
-
             if (caughtPoints > 0) {
                 scoreRef.current += caughtPoints;
+                // Trigger Drinking
+                if (!drinkingTimerRef.current) {
+                    setIsDrinking(true);
+                    drinkingTimerRef.current = setTimeout(() => {
+                        setIsDrinking(false);
+                        drinkingTimerRef.current = null;
+                    }, 400);
+                }
             }
 
             setGameState({
-                items: [...itemsRef.current],
+                items: nextItems,
                 score: scoreRef.current,
                 gameOver: false,
                 isPlaying: true
@@ -158,14 +214,28 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
     };
 
     const startGame = () => {
-        // Reset Refs
+        incrementTotalGames().then(setTotalGames);
         itemsRef.current = [];
         scoreRef.current = 0;
         isPlayingRef.current = true;
         spawnTimerRef.current = 0;
         lastTimeRef.current = 0;
 
+        if (sceneRef.current) {
+            sceneRef.current.style.filter = 'none';
+            sceneRef.current.style.transform = 'none';
+        }
+        if (flickerOverlayRef.current) {
+            flickerOverlayRef.current.style.opacity = '0';
+        }
+
         setIsNewRecord(false);
+        setIsDrinking(false);
+        if (drinkingTimerRef.current) {
+            clearTimeout(drinkingTimerRef.current);
+            drinkingTimerRef.current = null;
+        }
+
         setGameState({
             items: [],
             score: 0,
@@ -185,150 +255,193 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
             if (res.newRecord) {
                 setIsNewRecord(true);
                 confetti({
-                    particleCount: 150,
-                    spread: 80,
+                    particleCount: 200,
+                    spread: 100,
                     origin: { y: 0.6 },
-                    colors: ['#FFD700', '#FFA500', '#FFFFFF']
+                    colors: ['#FFD700', '#FFA500', '#FFFFFF', '#FF4500']
                 });
                 getHighScore().then(setHighScore);
             }
         });
 
-        setGameState(prev => ({
-            ...prev,
-            gameOver: true,
-            isPlaying: false
-        }));
+        setGameState(prev => ({ ...prev, gameOver: true, isPlaying: false }));
     };
 
     const handleTouchMove = (e: React.TouchEvent | React.MouseEvent) => {
         if (!containerRef.current || !isPlayingRef.current) return;
-
         let clientX;
-        if ('touches' in e) {
-            clientX = e.touches[0].clientX;
-        } else {
-            clientX = (e as React.MouseEvent).clientX;
-        }
+        if ('touches' in e) clientX = e.touches[0].clientX;
+        else clientX = (e as React.MouseEvent).clientX;
 
         const rect = containerRef.current.getBoundingClientRect();
         const relativeX = clientX - rect.left;
         const percentage = (relativeX / rect.width) * 100;
-
-        const clamped = Math.max(8, Math.min(92, percentage));
+        const clamped = Math.max(5, Math.min(95, percentage));
         playerXRef.current = clamped;
-
-        // No need to setPlayerX state if we don't render it separately? 
-        // We DO render it. So we can update specific state or Ref.
-        // For smoothness, player basket should react instantly.
-        // We can force a re-render or include playerX in gameState.
-        // Let's create a separate state for playerX to avoid full game logic rerender on mouse move?
-        // Actually, game loop rerenders every frame anyway (60fps). 
-        // So we can just use a ref for render, but we need React to know.
-        // Let's us `setPlayerX` separate from `gameState`? 
-        // Or if loop runs 60fps, it handles position update too.
-        // But mouse move might be faster/diff frequency.
-        // Let's keep `playerX` state separate for immediate feedback if game loop lags?
-        // No, simplest is `playerX` state synced.
         setPlayerX(clamped);
     };
 
+    const currentScore = gameState.score;
+    const shrinkFactor = Math.max(0.3, 1 - (currentScore * 0.015));
+    const basketScale = shrinkFactor;
     const [playerX, setPlayerX] = useState(50);
 
+    // Sprite Logic helper
+    const getHeroSprite = (score: number, drinking: boolean) => {
+        let base = 'man1';
+        if (score > 10) base = 'man3';
+        else if (score > 5) base = 'man2';
+
+        if (drinking) return `/${base}_drunk.png`;
+        return `/${base}.png`;
+    };
+
+    const currentSprite = getHeroSprite(currentScore, isDrinking);
+
     return (
-        <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-black/90">
+            <div ref={flickerOverlayRef} className="fixed inset-0 bg-black z-[70] pointer-events-none opacity-0 transition-opacity duration-200 ease-in-out" />
+
             <div
                 ref={containerRef}
-                className={`relative w-full h-full max-w-md ${backgroundStyle} overflow-hidden shadow-2xl flex flex-col touch-none select-none`}
+                className="relative w-full h-full max-w-md overflow-hidden shadow-2xl flex flex-col touch-none select-none bg-black"
                 onTouchMove={handleTouchMove}
                 onMouseMove={(e) => isPlayingRef.current && handleTouchMove(e)}
             >
-                {/* Background Stars */}
+                <div className={`absolute inset-0 ${backgroundStyle}`} />
                 <div className="absolute inset-0 opacity-30 pointer-events-none">
                     <div className="absolute top-[10%] left-[20%] text-[8px] text-white animate-pulse">✨</div>
                     <div className="absolute top-[30%] right-[15%] text-[10px] text-white animate-pulse delay-700">⭐</div>
-                    <div className="absolute top-[15%] right-[40%] text-[6px] text-white animate-pulse delay-300">✨</div>
-                    <div className="absolute top-[50%] left-[10%] text-[9px] text-yellow-100 animate-pulse delay-500">✨</div>
+                </div>
+
+                <div
+                    ref={sceneRef}
+                    className="relative w-full h-full will-change-transform"
+                    style={{ transformOrigin: 'center bottom' }}
+                >
+                    {/* Items */}
+                    {gameState.items.map(item => (
+                        <div
+                            key={item.id}
+                            className="absolute -translate-x-1/2 text-4xl pointer-events-none drop-shadow-lg z-10"
+                            style={{ left: `${item.x}%`, top: `${item.y}%`, transition: 'none' }}
+                        >
+                            {item.emoji}
+                        </div>
+                    ))}
+
+                    {/* Player Sprite */}
+                    <div
+                        className="absolute bottom-[10%] -translate-x-1/2 flex justify-center items-end pointer-events-none transition-transform duration-75 z-20"
+                        style={{
+                            left: `${playerX}%`,
+                            transform: `translateX(-50%) scaleX(${basketScale}) scaleY(${basketScale})`,
+                            width: '130px',
+                            height: '130px'
+                        }}
+                    >
+                        <img
+                            src={currentSprite}
+                            alt="Player"
+                            className="w-full h-full object-contain filter drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)] transition-all duration-300"
+                        />
+                    </div>
+
+                    {/* Bar Counter (Floor) */}
+                    <div className="absolute bottom-0 left-0 right-0 h-[12%] bg-[#4a2c18] border-t-4 border-[#6d4c30] shadow-[0_-5px_20px_rgba(0,0,0,0.6)] z-30 flex items-start justify-center overflow-hidden">
+                        <div className="w-full h-full opacity-20" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 10px, #000 10px, #000 12px)' }}></div>
+                        <div className="absolute top-1 left-0 right-0 h-[1px] bg-white/10"></div>
+                    </div>
                 </div>
 
                 {/* HUD */}
-                <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-start z-20">
-                    <div className="flex flex-col">
-                        <span className="text-4xl font-black text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.5)] font-mono tracking-wider">
+                <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-start z-50 pointer-events-none">
+                    <div className="flex flex-col pointer-events-auto">
+                        <span className="text-5xl font-black text-white drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)] font-mono tracking-wider">
                             {gameState.score}
                         </span>
                         {highScore && (
-                            <div className="bg-black/30 px-2 py-1 rounded text-[10px] text-white/80 backdrop-blur-sm mt-1 border border-white/10">
-                                👑 TOP: {highScore.name} ({highScore.score})
+                            <div className="bg-black/40 px-3 py-1 rounded-full text-xs text-yellow-300/90 font-bold backdrop-blur-sm mt-2 border border-yellow-500/30">
+                                👑 RÉCORD: {highScore.score} ({highScore.name})
                             </div>
                         )}
                     </div>
-                    <Button variant="ghost" size="icon" onClick={onClose} className="text-white hover:bg-white/20 rounded-full h-10 w-10">
-                        <X size={24} />
-                    </Button>
                 </div>
 
-                {/* Items */}
-                {gameState.items.map(item => (
-                    <div
-                        key={item.id}
-                        className="absolute -translate-x-1/2 text-4xl pointer-events-none drop-shadow-lg"
-                        style={{ left: `${item.x}%`, top: `${item.y}%`, transition: 'top 0s' }}
-                    >
-                        {item.emoji}
-                    </div>
-                ))}
-
-                {/* Player Basket */}
-                <div
-                    className="absolute bottom-[5%] -translate-x-1/2 text-6xl pointer-events-none drop-shadow-xl transition-transform duration-75"
-                    style={{ left: `${playerX}%` }}
+                {/* Persistent Close Button (Always Clickable) */}
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={onClose}
+                    className="absolute top-4 right-4 z-[90] text-white hover:bg-white/20 rounded-full h-12 w-12 bg-black/20 backdrop-blur pointer-events-auto"
                 >
-                    🧺
-                </div>
+                    <X size={28} />
+                </Button>
 
-                {/* Screens */}
+                {/* Start Screen */}
                 {!gameState.isPlaying && !gameState.gameOver && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 z-30 p-6 text-center animate-in fade-in">
-                        <div className="mb-6 p-6 bg-white/10 rounded-full backdrop-blur-lg border border-white/20 shadow-[0_0_30px_rgba(255,255,255,0.2)]">
-                            <span className="text-6xl">🏃🧺</span>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-[60] p-6 text-center animate-in fade-in">
+                        <div className="mb-6 w-36 h-36 bg-white/10 rounded-full backdrop-blur-lg border border-white/20 flex items-center justify-center shadow-[0_0_40px_rgba(255,255,255,0.1)] overflow-hidden">
+                            <img src="/man1.png" className="w-full h-full object-contain scale-90 mt-2" />
                         </div>
-                        <h2 className="text-4xl font-bold bg-gradient-to-r from-yellow-300 to-orange-500 bg-clip-text text-transparent mb-2">
-                            BEER CATCHER
+                        <h2 className="text-5xl font-black bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 bg-clip-text text-transparent mb-4 drop-shadow-sm">
+                            ATRAPA A CERVEZA
                         </h2>
-                        <p className="text-slate-200 mb-8 max-w-[250px] leading-relaxed">
-                            Mueve la cesta. ¡No dejes caer ninguna cerveza al suelo!
-                        </p>
+                        <div className="space-y-4 mb-8 max-w-[280px]">
+                            <p className="text-slate-300 text-lg leading-relaxed font-medium">
+                                Eres o cliente. <br />
+                                <span className="text-yellow-400">¡Que non caia nin unha gota na barra!</span>
+                            </p>
+                            <div className="flex gap-2 justify-center text-xs text-white/40 uppercase tracking-widest">
+                                <span>Cada cerveza emborracha máis</span>
+                            </div>
+                        </div>
                         <Button
                             onClick={startGame}
-                            className="bg-gradient-to-tr from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white font-bold text-xl px-10 py-8 rounded-full shadow-[0_10px_20px_rgba(16,185,129,0.4)] animate-pulse border-t border-white/30"
+                            className="bg-gradient-to-tr from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white font-black text-2xl px-12 py-8 rounded-full shadow-[0_0_30px_rgba(16,185,129,0.5)] animate-pulse border border-white/20 transition-all hover:scale-105 active:scale-95"
                         >
-                            <Play className="mr-2 fill-current w-6 h-6" /> JUGAR
+                            <Play className="mr-3 fill-current w-8 h-8" /> XOGAR
                         </Button>
                     </div>
                 )}
 
+                {/* Game Over Screen */}
                 {gameState.gameOver && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-900/90 backdrop-blur-md z-40 p-6 text-center animate-in zoom-in duration-300">
-                        <div className="text-7xl mb-4 animate-bounce">😭</div>
-                        <h2 className="text-5xl font-black text-white mb-2 drop-shadow-md">GAME OVER</h2>
-                        <div className="flex flex-col items-center my-6">
-                            <span className="text-white/60 text-sm uppercase tracking-widest mb-1">Puntuación Final</span>
-                            <span className="text-6xl font-mono font-bold text-yellow-300 drop-shadow-lg">{gameState.score}</span>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-950/95 backdrop-blur-xl z-[60] p-4 text-center animate-in zoom-in duration-300">
+                        <div className="mb-2 relative">
+                            <div className="absolute inset-0 bg-yellow-500/20 blur-xl rounded-full animate-pulse"></div>
+                            <img src="/man_finish.png" alt="Drunk Finish" className="w-32 h-32 object-contain relative z-10 drop-shadow-2xl transform hover:scale-105 transition-transform" />
+                        </div>
+
+                        <h2 className="text-5xl font-black text-white mb-1 drop-shadow-[0_5px_5px_rgba(0,0,0,0.5)]">GAME OVER</h2>
+                        <p className="text-red-200 font-bold mb-2">¡Te has pasado de copas!</p>
+
+                        <div className="flex flex-col items-center my-2 p-3 bg-white/5 rounded-3xl border border-white/10 w-full max-w-xs">
+                            <span className="text-white/60 text-xs uppercase tracking-widest mb-1">Puntuación</span>
+                            <span className="text-6xl font-mono font-black text-yellow-400 drop-shadow-lg">{gameState.score}</span>
                         </div>
 
                         {isNewRecord && (
-                            <div className="mb-8 bg-gradient-to-r from-yellow-400/80 to-orange-500/80 p-3 rounded-xl border border-yellow-200 shadow-lg animate-bounce text-white font-bold flex items-center gap-2">
-                                🏆 ¡NUEVO RÉCORD! 🏆
+                            <div className="mb-4 bg-gradient-to-r from-yellow-400 to-orange-500 text-white p-2 px-4 rounded-xl shadow-[0_0_30px_rgba(255,215,0,0.6)] animate-pulse font-black text-md flex items-center gap-2 transform rotate-1">
+                                🏆 ¡NOVO RÉCORD! 🏆
                             </div>
                         )}
 
-                        <Button
-                            onClick={startGame}
-                            className="bg-white text-red-900 hover:bg-indigo-50 font-bold text-lg px-8 py-6 rounded-full shadow-xl transition-transform active:scale-95"
-                        >
-                            <RotateCcw className="mr-2 w-5 h-5" /> INTENTAR DE NUEVO
-                        </Button>
+                        <div className="flex flex-col gap-2 w-full max-w-[220px] mt-1">
+                            <Button
+                                onClick={startGame}
+                                className="w-full bg-white text-red-900 hover:bg-slate-100 font-bold text-lg py-5 rounded-full shadow-2xl transition-transform active:scale-95"
+                            >
+                                <RotateCcw className="mr-2 w-5 h-5" /> OTRA RONDA
+                            </Button>
+
+                            <Button
+                                onClick={onClose}
+                                className="w-full bg-red-800 text-white hover:bg-red-700 font-bold text-md py-5 rounded-full shadow-lg border-2 border-white/20 transition-transform active:scale-95"
+                            >
+                                <X className="mr-2 w-4 h-4" /> SALIR
+                            </Button>
+                        </div>
                     </div>
                 )}
             </div>

@@ -169,7 +169,7 @@ export function MemberList({ initialMembers, isAdmin = false }: MemberListProps)
                         <span className="text-green-700 font-black text-2xl">{paid}</span>
                     </div>
                     <div className="flex flex-col items-center md:items-end p-2 bg-blue-100 rounded-lg min-w-[80px]">
-                        <span className="text-[10px] uppercase tracking-wider text-blue-800">Recogidos</span>
+                        <span className="text-[10px] uppercase tracking-wider text-blue-800">Recollidos</span>
                         <span className="text-blue-700 font-black text-2xl">{picked}</span>
                     </div>
                 </div>
@@ -251,7 +251,7 @@ export function MemberList({ initialMembers, isAdmin = false }: MemberListProps)
                         onClick={() => setQuickFilter('pendingPayment')}
                         className={`w-full ${quickFilter === 'pendingPayment' ? "text-red-700 bg-red-100 ring-1 ring-red-200" : "text-red-600 hover:bg-red-50 hover:text-red-700 border-red-200"}`}
                     >
-                        Pendientes de Pago ({total - paid})
+                        Pendentes de Pago ({total - paid})
                     </Button>
                     <Button
                         variant={quickFilter === 'pendingPickup' ? "secondary" : "outline"}
@@ -259,7 +259,7 @@ export function MemberList({ initialMembers, isAdmin = false }: MemberListProps)
                         onClick={() => setQuickFilter('pendingPickup')}
                         className={`w-full ${quickFilter === 'pendingPickup' ? "text-orange-700 bg-orange-100 ring-1 ring-orange-200" : "text-orange-600 hover:bg-orange-50 hover:text-orange-700 border-orange-200"}`}
                     >
-                        Pendientes de Recogida ({total - picked})
+                        Pendentes de Recollida ({total - picked})
                     </Button>
                 </div>
             </div>

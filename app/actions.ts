@@ -388,3 +388,24 @@ export async function saveHighScore(name: string, score: number) {
         return { success: false };
     }
 }
+const TOTAL_GAMES_KEY = 'fiesta:total_games';
+
+export async function getTotalGames(): Promise<number> {
+    noStore();
+    try {
+        const count = await redis.get(TOTAL_GAMES_KEY);
+        return count ? parseInt(count as string, 10) : 0;
+    } catch {
+        return 0;
+    }
+}
+
+export async function incrementTotalGames(): Promise<number> {
+    try {
+        const newCount = await redis.incr(TOTAL_GAMES_KEY);
+        revalidatePath('/');
+        return newCount;
+    } catch {
+        return 0;
+    }
+}
