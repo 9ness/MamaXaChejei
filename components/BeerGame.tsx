@@ -45,14 +45,15 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
     // Visual Refs for Direct DOM Manipulation (60fps perf)
     const containerRef = useRef<HTMLDivElement>(null);
     const flickerOverlayRef = useRef<HTMLDivElement>(null);
-    const sceneRef = useRef<HTMLDivElement>(null); // Inner scene wrapper for rotation/blur
-    const itemRefs = useRef<Map<number, HTMLDivElement>>(new Map()); // Direct item access
+    const sceneRef = useRef<HTMLDivElement>(null);
+    const itemRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+    const playerRef = useRef<HTMLDivElement>(null);
 
     // Timers & Loop
     const requestRef = useRef<number>(0);
     const lastTimeRef = useRef<number>(0);
     const spawnTimerRef = useRef<number>(0);
-    const nextBlinkTimeRef = useRef<number>(0); // For natural blinking
+    const nextBlinkTimeRef = useRef<number>(0);
 
     // Animation Refs
     const drinkingTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -106,11 +107,12 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
 
         // --- 2. Visual Effects (Direct DOM) ---
         if (sceneRef.current && flickerOverlayRef.current) {
-            // A. Oscillating Blur (Focus/Unfocus)
-            // "Breathe" factor: 0.2 to 1.0 sine wave
+            // A. Oscillating Blur (The "Drunk" Effect)
+            // RESTORED BUT OPTIMIZED with will-change: filter
             const breathe = 0.6 + 0.4 * Math.sin(totalTime * 0.003);
             const baseBlur = currentScore * 0.25;
-            const blurAmount = baseBlur * breathe;
+            // Cap blur to prevent unplayable mess and extreme GPU load
+            const blurAmount = Math.min(8, baseBlur * breathe);
 
             // Rotation (Dizziness)
             const maxRotation = currentScore * 0.4;
@@ -123,27 +125,23 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
                 scale = 1 + (pulse * intensity);
             }
 
+            // Apply transformations
+            // NOTE: Changing filter every frame IS expensive, but 'will-change: filter' helps.
+            // If it's still slow, we might need to quantize it (update every 5 frames).
+            // For now, attempting full fluidity as requested.
             sceneRef.current.style.filter = `blur(${blurAmount}px)`;
-            sceneRef.current.style.transform = `rotate(${sway}deg) scale(${scale})`;
+            sceneRef.current.style.transform = `rotate(${sway}deg) scale(${scale}) translateZ(0)`;
 
-            // C. Natural Blink (Slow Blink)
-            // Start blinking after 5 points
+            // C. Natural Blink
             if (currentScore >= 5) {
                 if (totalTime > nextBlinkTimeRef.current) {
-                    // Trigger Blink (Close Eyes)
-                    flickerOverlayRef.current.style.opacity = '0.95';
-
-                    // Schedule "Open Eyes"
-                    const blinkDuration = Math.random() * 200 + 150; // 150-350ms blink
+                    flickerOverlayRef.current.style.opacity = '0.92';
+                    const blinkDuration = Math.random() * 200 + 150;
                     setTimeout(() => {
-                        if (flickerOverlayRef.current) flickerOverlayRef.current.style.opacity = '0';
+                        if (flickerOverlayRef.current) flickerOverlayRef.current.style.opacity = '0.001'; // Keep layer active
                     }, blinkDuration);
-
-                    // Schedule Next Blink
-                    // Higher score = more frequent blinking (drowsiness)
                     const baseInterval = Math.max(1000, 5000 - (currentScore * 200));
-                    const variance = Math.random() * 2000;
-                    nextBlinkTimeRef.current = totalTime + baseInterval + variance;
+                    nextBlinkTimeRef.current = totalTime + baseInterval + (Math.random() * 2000);
                 }
             }
         }
@@ -162,7 +160,6 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
         }
 
         // --- 4. Physics & Collisions ---
-        // --- 4. Physics & Collisions ---
         const curPlayerX = playerXRef.current;
         const playerLeft = curPlayerX - hitBoxHalfWidth;
         const playerRight = curPlayerX + hitBoxHalfWidth;
@@ -171,15 +168,13 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
         let caughtPoints = 0;
         const nextItems: Item[] = [];
 
-        // Logic Loop
         for (const item of itemsRef.current) {
             const newY = item.y + (item.speed * delta * 0.1);
             const wobbleMultiplier = 1 + (currentScore * 0.05);
-            const wave = Math.sin((newY * 0.1) + (item.id % 100));
+            const wave = Math.sin((newY * 0.1) + (item.id % 10));
             const newX = item.x + (wave * 0.4 * delta * 0.05 * wobbleMultiplier);
             const clampedX = Math.max(2, Math.min(98, newX));
 
-            // Catch Zone
             if (newY > 75 && newY < 88) {
                 if (clampedX > playerLeft && clampedX < playerRight) {
                     caughtPoints++;
@@ -187,17 +182,12 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
                 }
             }
 
-            // Miss Condition
             if (newY >= 88) {
                 missed = true;
                 break;
             } else {
-                // Keep item
                 const updatedItem = { ...item, y: newY, x: clampedX };
                 nextItems.push(updatedItem);
-
-                // DIRECT DOM UPDATE (Performance Fix)
-                // We bypass React state for pure movement to avoid Re-Renders
                 const el = itemRefs.current.get(item.id);
                 if (el) {
                     el.style.left = `${clampedX}%`;
@@ -206,16 +196,12 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
             }
         }
 
-        // --- 5. Outcome ---
         if (missed) {
             handleGameOver();
         } else {
-            // Update Source of Truth
             itemsRef.current = nextItems;
-
             if (caughtPoints > 0) {
                 scoreRef.current += caughtPoints;
-                // Trigger Drinking
                 if (!drinkingTimerRef.current) {
                     setIsDrinking(true);
                     drinkingTimerRef.current = setTimeout(() => {
@@ -225,12 +211,7 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
                 }
             }
 
-            // OPTIMIZATION: Only triggering React Render if strictly necessary
-            // 1. Score changed (visual update of HUD / Sprite)
-            // 2. Items added/removed (DOM Topology change)
-            // 3. Game Over (Handled above)
             const shouldRender = caughtPoints > 0 || nextItems.length !== gameState.items.length;
-
             if (shouldRender) {
                 setGameState({
                     items: nextItems,
@@ -249,13 +230,17 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
         isPlayingRef.current = true;
         spawnTimerRef.current = 0;
         lastTimeRef.current = 0;
+        playerXRef.current = 50;
 
         if (sceneRef.current) {
-            sceneRef.current.style.filter = 'none';
             sceneRef.current.style.transform = 'none';
+            sceneRef.current.style.filter = 'none';
         }
         if (flickerOverlayRef.current) {
-            flickerOverlayRef.current.style.opacity = '0';
+            flickerOverlayRef.current.style.opacity = '0.001';
+        }
+        if (playerRef.current) {
+            playerRef.current.style.left = '50%';
         }
 
         setIsNewRecord(false);
@@ -265,13 +250,7 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
             drinkingTimerRef.current = null;
         }
 
-        setGameState({
-            items: [],
-            score: 0,
-            gameOver: false,
-            isPlaying: true
-        });
-
+        setGameState({ items: [], score: 0, gameOver: false, isPlaying: true });
         if (requestRef.current) cancelAnimationFrame(requestRef.current);
         requestRef.current = requestAnimationFrame(animate);
     };
@@ -284,36 +263,27 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
         const currentRecord = await getHighScore();
         const isRecord = !currentRecord || score > currentRecord.score;
 
-        // Anónimo Check: If record & anonymous -> Prompt Name
         if (isRecord && (playerName === 'Anónimo' || !playerName)) {
             setIsNewRecord(true);
             setPendingScore(score);
             setShowNameInput(true);
             setNameInput('');
-
-            // Celebration
             confetti({
-                particleCount: 200,
-                spread: 100,
-                origin: { y: 0.6 },
+                particleCount: 200, spread: 100, origin: { y: 0.6 },
                 colors: ['#FFD700', '#FFA500', '#FFFFFF', '#FF4500']
             });
         } else {
-            // Standard Save
             saveHighScore(playerName, score).then((res) => {
                 if (res.newRecord) {
                     setIsNewRecord(true);
                     confetti({
-                        particleCount: 200,
-                        spread: 100,
-                        origin: { y: 0.6 },
+                        particleCount: 200, spread: 100, origin: { y: 0.6 },
                         colors: ['#FFD700', '#FFA500', '#FFFFFF', '#FF4500']
                     });
                     getHighScore().then(setHighScore);
                 }
             });
         }
-
         setGameState(prev => ({ ...prev, gameOver: true, isPlaying: false }));
     };
 
@@ -335,43 +305,46 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
         const relativeX = clientX - rect.left;
         const percentage = (relativeX / rect.width) * 100;
         const clamped = Math.max(5, Math.min(95, percentage));
+
         playerXRef.current = clamped;
-        setPlayerX(clamped);
+        if (playerRef.current) {
+            playerRef.current.style.left = `${clamped}%`;
+        }
     };
 
     const currentScore = gameState.score;
     const shrinkFactor = Math.max(0.3, 1 - (currentScore * 0.015));
     const basketScale = shrinkFactor;
-    const [playerX, setPlayerX] = useState(50);
 
-    // Sprite Logic helper
-    const getHeroSprite = (score: number, drinking: boolean) => {
+    // Sprite Logic: Determine which sprite ID is active
+    const getActiveSpriteId = (score: number, drinking: boolean) => {
         let base = 'man1';
         if (score > 10) base = 'man3';
         else if (score > 5) base = 'man2';
-
-        if (drinking) return `/${base}_drunk.png`;
-        return `/${base}.png`;
+        return drinking ? `${base}_drunk` : base;
     };
 
-    const currentSprite = getHeroSprite(currentScore, isDrinking);
+    const activeSpriteId = getActiveSpriteId(currentScore, isDrinking);
 
-    // Preload Asssets
-    useEffect(() => {
-        const assets = [
-            '/man1.png', '/man2.png', '/man3.png',
-            '/man1_drunk.png', '/man2_drunk.png', '/man3_drunk.png',
-            '/man_finish.png'
-        ];
-        assets.forEach(src => {
-            const img = new Image();
-            img.src = src;
-        });
-    }, []);
+    // All possible sprites for pre-rendering
+    const ALL_SPRITES = [
+        { id: 'man1', src: '/man1.png' },
+        { id: 'man1_drunk', src: '/man1_drunk.png' },
+        { id: 'man2', src: '/man2.png' },
+        { id: 'man2_drunk', src: '/man2_drunk.png' },
+        { id: 'man3', src: '/man3.png' },
+        { id: 'man3_drunk', src: '/man3_drunk.png' },
+        { id: 'man_finish', src: '/man_finish.png' }, // Not used in player loop but good to preload
+    ];
 
     return (
         <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-black/90">
-            <div ref={flickerOverlayRef} className="fixed inset-0 bg-black z-[70] pointer-events-none opacity-0 transition-opacity duration-200 ease-in-out" />
+            {/* Optimized Flicker Overlay: 'will-change' + initialized opacity for layer promotion */}
+            <div
+                ref={flickerOverlayRef}
+                className="fixed inset-0 bg-black z-[70] pointer-events-none transition-opacity duration-200 ease-in-out will-change-[opacity]"
+                style={{ opacity: 0.001 }} // Start nearly invisible but active
+            />
 
             <div
                 ref={containerRef}
@@ -387,7 +360,7 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
 
                 <div
                     ref={sceneRef}
-                    className="relative w-full h-full will-change-transform"
+                    className="relative w-full h-full will-change-[transform,filter]" // Critical Optimization
                     style={{ transformOrigin: 'center bottom' }}
                 >
                     {/* Items */}
@@ -405,24 +378,32 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
                         </div>
                     ))}
 
-                    {/* Player Sprite */}
+                    {/* LOW-LATENCY PLAYER SPRITE SYSTEM */}
+                    {/* Instead of replacing the <img> src (causing decoding stutter), we pre-render ALL sprites */}
                     <div
-                        className="absolute bottom-[10%] -translate-x-1/2 flex justify-center items-end pointer-events-none transition-transform duration-75 z-20"
+                        ref={playerRef}
+                        className="absolute bottom-[10%] -translate-x-1/2 flex justify-center items-end pointer-events-none transition-transform duration-75 z-20 will-change-transform"
                         style={{
-                            left: `${playerX}%`,
+                            left: `50%`,
                             transform: `translateX(-50%) scaleX(${basketScale}) scaleY(${basketScale})`,
                             width: '130px',
                             height: '130px'
                         }}
                     >
-                        <img
-                            src={currentSprite}
-                            alt="Player"
-                            className="w-full h-full object-contain filter drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)] transition-all duration-300"
-                        />
+                        {ALL_SPRITES.filter(s => s.id !== 'man_finish').map((sprite) => (
+                            <img
+                                key={sprite.id}
+                                src={sprite.src}
+                                alt="Player"
+                                className="absolute inset-0 w-full h-full object-contain filter drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)] transition-opacity duration-75"
+                                style={{
+                                    opacity: sprite.id === activeSpriteId ? 1 : 0,
+                                    zIndex: sprite.id === activeSpriteId ? 2 : 1
+                                }}
+                            />
+                        ))}
                     </div>
 
-                    {/* Bar Counter (Floor) */}
                     <div className="absolute bottom-0 left-0 right-0 h-[12%] bg-[#4a2c18] border-t-4 border-[#6d4c30] shadow-[0_-5px_20px_rgba(0,0,0,0.6)] z-30 flex items-start justify-center overflow-hidden">
                         <div className="w-full h-full opacity-20" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 10px, #000 10px, #000 12px)' }}></div>
                         <div className="absolute top-1 left-0 right-0 h-[1px] bg-white/10"></div>
@@ -443,7 +424,6 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
                     </div>
                 </div>
 
-                {/* Persistent Close Button (Always Clickable) */}
                 <Button
                     variant="ghost"
                     size="icon"
@@ -453,7 +433,6 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
                     <X size={28} />
                 </Button>
 
-                {/* Start Screen */}
                 {!gameState.isPlaying && !gameState.gameOver && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-[60] p-6 text-center animate-in fade-in">
                         <div className="mb-6 w-36 h-36 bg-white/10 rounded-full backdrop-blur-lg border border-white/20 flex items-center justify-center shadow-[0_0_40px_rgba(255,255,255,0.1)] overflow-hidden">
@@ -480,31 +459,24 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
                     </div>
                 )}
 
-                {/* Game Over Screen */}
                 {gameState.gameOver && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-950/95 backdrop-blur-xl z-[60] p-4 text-center animate-in zoom-in duration-300">
                         <div className="mb-2 relative">
                             <div className="absolute inset-0 bg-yellow-500/20 blur-xl rounded-full animate-pulse"></div>
                             <img src="/man_finish.png" alt="Drunk Finish" className="w-32 h-32 object-contain relative z-10 drop-shadow-2xl transform hover:scale-105 transition-transform" />
                         </div>
-
                         <h2 className="text-5xl font-black text-white mb-1 drop-shadow-[0_5px_5px_rgba(0,0,0,0.5)]">A CA BOU SE!</h2>
                         <p className="text-red-200 font-bold mb-2">¡Pasásteste de copas!</p>
-
                         <div className="flex flex-col items-center my-2 p-3 bg-white/5 rounded-3xl border border-white/10 w-full max-w-xs">
                             <span className="text-white/60 text-xs uppercase tracking-widest mb-1">Puntuación</span>
                             <span className="text-6xl font-mono font-black text-yellow-400 drop-shadow-lg">{gameState.score}</span>
                         </div>
-
                         {isNewRecord && (
                             <div className="mb-4 bg-gradient-to-r from-yellow-400 to-orange-500 text-white p-2 px-4 rounded-xl shadow-[0_0_30px_rgba(255,215,0,0.6)] animate-pulse font-black text-md flex items-center gap-2 transform rotate-1">
                                 🏆 ¡NOVO RÉCORD! 🏆
                             </div>
-
                         )}
-
                         <div className="flex flex-col gap-2 w-full max-w-[220px] mt-1">
-                            {/* Name Input for Record */}
                             {showNameInput ? (
                                 <div className="animate-in fade-in slide-in-from-bottom-2 w-full mb-2">
                                     <p className="text-yellow-200 text-xs mb-1 font-bold">¡Garda o teu récord!</p>
@@ -516,11 +488,7 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
                                             className="bg-white/10 border-white/20 text-white placeholder:text-white/50 h-10"
                                             maxLength={15}
                                         />
-                                        <Button
-                                            size="icon"
-                                            onClick={saveNamedRecord}
-                                            className="bg-green-600 hover:bg-green-700 h-10 w-10 shrink-0"
-                                        >
+                                        <Button size="icon" onClick={saveNamedRecord} className="bg-green-600 hover:bg-green-700 h-10 w-10 shrink-0">
                                             <Save className="w-4 h-4" />
                                         </Button>
                                     </div>
@@ -533,13 +501,9 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
                                     <RotateCcw className="mr-2 w-5 h-5" /> OUTRA RONDA
                                 </Button>
                             )}
-
                             <Button
                                 onClick={() => {
-                                    // If pending record, save as Anónimo on exit?
-                                    if (showNameInput) {
-                                        saveHighScore('Anónimo', pendingScore);
-                                    }
+                                    if (showNameInput) saveHighScore('Anónimo', pendingScore);
                                     onClose();
                                 }}
                                 className="w-full bg-red-800 text-white hover:bg-red-700 font-bold text-md py-5 rounded-full shadow-lg border-2 border-white/20 transition-transform active:scale-95"
@@ -550,6 +514,6 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
                     </div>
                 )}
             </div>
-        </div >
+        </div>
     );
 }
