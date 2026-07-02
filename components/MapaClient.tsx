@@ -44,6 +44,13 @@ function relTime(ts?: number): string {
     return `hai ${h} h`;
 }
 
+function fmtRestante(ms: number): string {
+    const s = Math.max(0, Math.ceil(ms / 1000));
+    const m = Math.floor(s / 60);
+    const ss = s % 60;
+    return `${m}:${String(ss).padStart(2, '0')}`;
+}
+
 export function MapaClient() {
     const mapRef = useRef<HTMLDivElement>(null);
     const mapObj = useRef<L.Map | null>(null);
@@ -57,6 +64,10 @@ export function MapaClient() {
     const [busy, setBusy] = useState(false);
     const [status, setStatus] = useState<string>('');
 
+    // Compartido puntual: hasta cuándo dura (para cuenta atrás + botón de quitar)
+    const [shareUntil, setShareUntil] = useState<number | null>(null);
+    const [nowTick, setNowTick] = useState<number>(0);
+
     // Preferencias del usuario
     const [nombre, setNombre] = useState('');
     const [color, setColor] = useState<string>('#3b82f6');
@@ -65,6 +76,24 @@ export function MapaClient() {
     // Estos refs mantienen los valores actuales para el modo "en directo"
     const prefs = useRef({ nombre: '', color: '#3b82f6', durSecs: 1800 });
     useEffect(() => { prefs.current = { nombre, color, durSecs }; }, [nombre, color, durSecs]);
+
+    // Cuenta atrás del tiempo compartido (puntual)
+    useEffect(() => {
+        if (shareUntil === null) return;
+        setNowTick(Date.now());
+        const t = setInterval(() => {
+            const n = Date.now();
+            setNowTick(n);
+            if (n >= shareUntil) {
+                setShareUntil(null);
+                setStatus('⌛ Rematou o tempo. O teu punto xa non se ve.');
+                refreshPoints();
+            }
+        }, 1000);
+        return () => clearInterval(t);
+        // refreshPoints es estable (useCallback)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [shareUntil]);
 
     // Cargar preferencias guardadas
     useEffect(() => {
@@ -164,6 +193,13 @@ export function MapaClient() {
 
     const minutosTexto = () => DURACIONES.find(d => d.secs === durSecs)?.label ?? '30 min';
 
+    const stopShare = () => {
+        const id = getAnonId();
+        removeLocation(id).then(refreshPoints);
+        setShareUntil(null);
+        setStatus('Deixaches de compartir a túa ubicación.');
+    };
+
     const handleHere = () => {
         if (!('geolocation' in navigator)) {
             setStatus('O teu navegador non soporta xeolocalización.');
@@ -176,7 +212,8 @@ export function MapaClient() {
             async (pos) => {
                 await publish(pos.coords.latitude, pos.coords.longitude, { recenter: true, live: false });
                 setBusy(false);
-                setStatus(`✅ Compartiches a túa ubicación durante ${minutosTexto()}.`);
+                setShareUntil(Date.now() + durSecs * 1000);
+                setStatus('✅ Ubicación compartida.');
             },
             (err) => {
                 setBusy(false);
@@ -205,6 +242,7 @@ export function MapaClient() {
             return;
         }
         persistPrefs();
+        setShareUntil(null); // el directo se renueva solo; no usa la cuenta atrás puntual
         watchId.current = navigator.geolocation.watchPosition(
             async (pos) => {
                 const now = Date.now();
@@ -299,6 +337,25 @@ export function MapaClient() {
                     </Button>
                 </div>
             </div>
+
+            {/* Compartido activo (puntual): cuenta atrás + quitar */}
+            {shareUntil !== null && (
+                <div className="flex items-center justify-between gap-3 bg-primary/5 border border-primary/25 rounded-xl px-3 py-2.5 animate-in fade-in slide-in-from-top-1">
+                    <span className="flex items-center gap-2 text-sm font-medium">
+                        <span className="relative flex h-2.5 w-2.5 shrink-0">
+                            <span className="absolute inline-flex h-full w-full rounded-full bg-primary opacity-60 animate-ping" />
+                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary" />
+                        </span>
+                        Compartindo · queda{' '}
+                        <span className="font-mono font-bold tabular-nums text-primary">
+                            {fmtRestante(shareUntil - nowTick)}
+                        </span>
+                    </span>
+                    <Button size="sm" variant="outline" onClick={stopShare} className="shrink-0">
+                        Deixar de compartir
+                    </Button>
+                </div>
+            )}
 
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground px-1">
                 <span className="flex items-center gap-1.5">
