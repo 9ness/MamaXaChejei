@@ -516,13 +516,16 @@ export interface AnonLocation {
     ts: number;
     name?: string;
     color?: string;
+    live?: boolean;
 }
 
 export interface MapPoint {
     lat: number;
     lng: number;
+    ts: number;
     name?: string;
     color?: string;
+    live?: boolean;
 }
 
 export async function shareLocation(
@@ -532,6 +535,7 @@ export async function shareLocation(
     name?: string,
     color?: string,
     ttlSeconds?: number,
+    live?: boolean,
 ) {
     // Validación básica de coordenadas
     if (
@@ -549,6 +553,7 @@ export async function shareLocation(
         if (cleanName) payload.name = cleanName;
         const cleanColor = (color ?? '').trim().slice(0, 24);
         if (cleanColor) payload.color = cleanColor;
+        if (live) payload.live = true;
 
         await redis.set(`${LOC_PREFIX}${id}`, JSON.stringify(payload), { ex: ttl });
         await redis.sadd(LOC_INDEX, id);
@@ -590,7 +595,7 @@ export async function getLocations(): Promise<MapPoint[]> {
             }
             const loc = typeof raw === 'string' ? (JSON.parse(raw) as AnonLocation) : (raw as AnonLocation);
             if (loc && typeof loc.lat === 'number' && typeof loc.lng === 'number') {
-                points.push({ lat: loc.lat, lng: loc.lng, name: loc.name, color: loc.color });
+                points.push({ lat: loc.lat, lng: loc.lng, ts: loc.ts, name: loc.name, color: loc.color, live: loc.live });
             }
         });
 

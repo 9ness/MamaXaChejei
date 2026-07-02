@@ -29,6 +29,21 @@ function getAnonId(): string {
     return id;
 }
 
+function escapeHtml(s: string): string {
+    return s.replace(/[&<>"']/g, (c) => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string
+    ));
+}
+
+function relTime(ts?: number): string {
+    if (!ts) return '';
+    const mins = Math.floor((Date.now() - ts) / 60000);
+    if (mins < 1) return 'agora';
+    if (mins < 60) return `hai ${mins} min`;
+    const h = Math.floor(mins / 60);
+    return `hai ${h} h`;
+}
+
 export function MapaClient() {
     const mapRef = useRef<HTMLDivElement>(null);
     const mapObj = useRef<L.Map | null>(null);
@@ -68,18 +83,22 @@ export function MapaClient() {
         const points = await getLocations();
         layer.clearLayers();
         points.forEach(p => {
-            const marker = Lm.circleMarker([p.lat, p.lng], {
-                radius: 9,
-                color: '#ffffff',
-                weight: 2,
-                fillColor: p.color || '#3b82f6',
-                fillOpacity: 0.95,
-            }).addTo(layer);
-            if (p.name) {
-                marker.bindTooltip(p.name, {
+            const dotColor = p.color || '#3b82f6';
+            const icon = Lm.divIcon({
+                html: `<div class="mxc-marker ${p.live ? 'is-live' : ''}" style="--dot:${escapeHtml(dotColor)}"><span class="mxc-dot"></span></div>`,
+                className: '',
+                iconSize: [18, 18],
+                iconAnchor: [9, 9],
+            });
+            const marker = Lm.marker([p.lat, p.lng], { icon }).addTo(layer);
+
+            const rel = relTime(p.ts);
+            const tip = `${p.name ? `<span class="mxc-name">${escapeHtml(p.name)}</span>` : ''}${rel ? `<span class="mxc-time">${rel}</span>` : ''}`;
+            if (tip) {
+                marker.bindTooltip(tip, {
                     permanent: true,
                     direction: 'top',
-                    offset: [0, -6],
+                    offset: [0, -8],
                     className: 'mxc-tooltip',
                 });
             }
@@ -129,11 +148,11 @@ export function MapaClient() {
         };
     }, [refreshPoints]);
 
-    const publish = useCallback(async (lat: number, lng: number, recenter = false) => {
+    const publish = useCallback(async (lat: number, lng: number, opts: { recenter?: boolean; live?: boolean } = {}) => {
         const id = getAnonId();
         const { nombre, color, durSecs } = prefs.current;
-        await shareLocation(id, lat, lng, nombre, color, durSecs);
-        if (recenter && mapObj.current) mapObj.current.setView([lat, lng], 17);
+        await shareLocation(id, lat, lng, nombre, color, durSecs, opts.live);
+        if (opts.recenter && mapObj.current) mapObj.current.setView([lat, lng], 17);
         await refreshPoints();
     }, [refreshPoints]);
 
@@ -155,7 +174,7 @@ export function MapaClient() {
         setStatus('Buscando a túa posición…');
         navigator.geolocation.getCurrentPosition(
             async (pos) => {
-                await publish(pos.coords.latitude, pos.coords.longitude, true);
+                await publish(pos.coords.latitude, pos.coords.longitude, { recenter: true, live: false });
                 setBusy(false);
                 setStatus(`✅ Compartiches a túa ubicación durante ${minutosTexto()}.`);
             },
@@ -191,7 +210,7 @@ export function MapaClient() {
                 const now = Date.now();
                 if (now - lastShare.current < 15000) return; // throttle 15s
                 lastShare.current = now;
-                await publish(pos.coords.latitude, pos.coords.longitude);
+                await publish(pos.coords.latitude, pos.coords.longitude, { live: true });
             },
             (err) => {
                 setStatus(err.code === err.PERMISSION_DENIED
@@ -281,9 +300,21 @@ export function MapaClient() {
                 </div>
             </div>
 
-            <div className="flex items-center gap-2 text-xs text-muted-foreground px-1">
-                <Users className="w-3.5 h-3.5 shrink-0" />
-                <span>{count} {count === 1 ? 'persoa' : 'persoas'} no mapa</span>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground px-1">
+                <span className="flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 shrink-0" />
+                    {count} {count === 1 ? 'persoa' : 'persoas'} no mapa
+                </span>
+                <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-slate-400 border border-white shadow-sm" /> puntual
+                </span>
+                <span className="flex items-center gap-1.5">
+                    <span className="relative flex w-2.5 h-2.5">
+                        <span className="absolute inline-flex h-full w-full rounded-full bg-slate-400 opacity-60 animate-ping" />
+                        <span className="relative inline-flex rounded-full w-2.5 h-2.5 bg-slate-500 border border-white" />
+                    </span>
+                    en directo
+                </span>
             </div>
             {status && (
                 <p className="text-xs text-center bg-muted/60 rounded-lg px-3 py-2">{status}</p>

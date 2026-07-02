@@ -78,7 +78,7 @@
   }
 }
 
-/* Etiquetas de nombre en el mapa (Leaflet tooltip) */
+/* Etiquetas de los puntos del mapa (Leaflet tooltip) */
 .mxc-tooltip {
   background: rgba(17, 24, 39, 0.92);
   color: #fff;
@@ -91,4 +91,49 @@
 }
 .mxc-tooltip::before {
   border-top-color: rgba(17, 24, 39, 0.92) !important;
+}
+.mxc-tooltip .mxc-time {
+  font-weight: 500;
+  opacity: 0.7;
+  font-size: 10px;
+}
+.mxc-tooltip .mxc-name + .mxc-time {
+  margin-left: 4px;
+}
+
+/* Marcador de persona en el mapa */
+.mxc-marker {
+  position: relative;
+  width: 18px;
+  height: 18px;
+}
+.mxc-marker .mxc-dot {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: var(--dot, #3b82f6);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  z-index: 2;
+}
+/* Anillo pulsante solo cuando se comparte EN DIRECTO */
+.mxc-marker.is-live::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: var(--dot, #3b82f6);
+  opacity: 0.55;
+  z-index: 1;
+  animation: mxc-pulse 1.5s ease-out infinite;
+}
+@keyframes mxc-pulse {
+  0% { transform: scale(1); opacity: 0.55; }
+  100% { transform: scale(2.8); opacity: 0; }
 }
