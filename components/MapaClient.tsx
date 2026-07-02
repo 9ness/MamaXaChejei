@@ -9,15 +9,15 @@ import { MapPin, Radio, Loader2, Users, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { shareLocation, getLocations, removeLocation } from '@/app/actions';
 
-// 📍 Recinto da festa: Praza Castelao (Padrón). Centro del mapa.
-// Ancla fiable: Concello de Padrón = 42.73837, -8.66048 (OpenStreetMap).
-const FESTA = { lat: 42.7392, lng: -8.66052, label: 'Praza Castelao' };
+// 📍 Recinto da festa: Praza de Castelao (Rianxo). Centro del mapa.
+// Ancla fiable: Concello de Rianxo = 42.65190, -8.81830 (dirección: Praza Castelao).
+const FESTA = { lat: 42.6522, lng: -8.8183, label: 'Praza de Castelao' };
 
 // Puntos de interés fijos (orquestas, barra, escenario…). Coordenadas APROXIMADAS
 // a partir de la foto marcada; se afinan cuando el usuario dé los puntos exactos.
 const POIS: { lat: number; lng: number; label: string; emoji: string }[] = [
-    { lat: 42.73952, lng: -8.66048, label: 'Orquestra (norte)', emoji: '🎤' },
-    { lat: 42.73888, lng: -8.66055, label: 'Orquestra (sur)', emoji: '🎶' },
+    { lat: 42.65255, lng: -8.81828, label: 'Orquestra (norte)', emoji: '🎤' },
+    { lat: 42.65205, lng: -8.81832, label: 'Orquestra (sur)', emoji: '🎶' },
 ];
 
 const DURACIONES = [
