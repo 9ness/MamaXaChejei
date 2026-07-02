@@ -20,6 +20,9 @@ const DURACIONES = [
 
 const COLORES = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#a855f7', '#ec4899'];
 
+const LIVE_THROTTLE_MS = 4000; // en directo: refresca el punto cada ~4s
+const LIVE_WRITE_TTL = 60;     // segundos que sobrevive el punto sin actualizarse (red de seguridad)
+
 function getAnonId(): string {
     let id = localStorage.getItem('anon_id');
     if (!id) {
@@ -77,6 +80,9 @@ export function MapaClient() {
     const prefs = useRef({ nombre: '', color: '#3b82f6', durSecs: 1800 });
     useEffect(() => { prefs.current = { nombre, color, durSecs }; }, [nombre, color, durSecs]);
 
+    const liveRef = useRef(false);
+    useEffect(() => { liveRef.current = live; }, [live]);
+
     // Cuenta atrás del tiempo compartido (puntual)
     useEffect(() => {
         if (shareUntil === null) return;
@@ -85,13 +91,17 @@ export function MapaClient() {
             const n = Date.now();
             setNowTick(n);
             if (n >= shareUntil) {
-                setShareUntil(null);
-                setStatus('⌛ Rematou o tempo. O teu punto xa non se ve.');
-                refreshPoints();
+                if (liveRef.current) {
+                    stopLive('⌛ Rematou o tempo de compartido en directo.');
+                } else {
+                    setShareUntil(null);
+                    setStatus('⌛ Rematou o tempo. O teu punto xa non se ve.');
+                    refreshPoints();
+                }
             }
         }, 1000);
         return () => clearInterval(t);
-        // refreshPoints es estable (useCallback)
+        // refreshPoints/stopLive son estables (useCallback)
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [shareUntil]);
 
@@ -180,9 +190,24 @@ export function MapaClient() {
     const publish = useCallback(async (lat: number, lng: number, opts: { recenter?: boolean; live?: boolean } = {}) => {
         const id = getAnonId();
         const { nombre, color, durSecs } = prefs.current;
-        await shareLocation(id, lat, lng, nombre, color, durSecs, opts.live);
+        // En directo el punto se reescribe cada pocos segundos con TTL corto;
+        // el puntual usa el TTL completo (15/30/60 min).
+        const ttl = opts.live ? LIVE_WRITE_TTL : durSecs;
+        await shareLocation(id, lat, lng, nombre, color, ttl, opts.live);
         if (opts.recenter && mapObj.current) mapObj.current.setView([lat, lng], 17);
         await refreshPoints();
+    }, [refreshPoints]);
+
+    const stopLive = useCallback((msg?: string) => {
+        if (watchId.current !== null) {
+            navigator.geolocation.clearWatch(watchId.current);
+            watchId.current = null;
+        }
+        setLive(false);
+        setShareUntil(null);
+        const id = getAnonId();
+        removeLocation(id).then(refreshPoints);
+        if (msg) setStatus(msg);
     }, [refreshPoints]);
 
     const persistPrefs = () => {
@@ -227,14 +252,7 @@ export function MapaClient() {
 
     const toggleLive = () => {
         if (live) {
-            if (watchId.current !== null) {
-                navigator.geolocation.clearWatch(watchId.current);
-                watchId.current = null;
-            }
-            setLive(false);
-            setStatus('Deixaches de compartir en directo.');
-            const id = getAnonId();
-            removeLocation(id).then(refreshPoints);
+            stopLive('Deixaches de compartir en directo.');
             return;
         }
         if (!('geolocation' in navigator)) {
@@ -242,28 +260,24 @@ export function MapaClient() {
             return;
         }
         persistPrefs();
-        setShareUntil(null); // el directo se renueva solo; no usa la cuenta atrás puntual
+        lastShare.current = 0; // forzar primera publicación inmediata
+        setShareUntil(Date.now() + durSecs * 1000); // el directo se apaga solo al cumplirse la duración
         watchId.current = navigator.geolocation.watchPosition(
             async (pos) => {
                 const now = Date.now();
-                if (now - lastShare.current < 15000) return; // throttle 15s
+                if (now - lastShare.current < LIVE_THROTTLE_MS) return; // refresca cada ~4s
                 lastShare.current = now;
                 await publish(pos.coords.latitude, pos.coords.longitude, { live: true });
             },
             (err) => {
-                setStatus(err.code === err.PERMISSION_DENIED
+                stopLive(err.code === err.PERMISSION_DENIED
                     ? '❌ Tes que dar permiso de ubicación no navegador.'
                     : '❌ Erro co GPS.');
-                setLive(false);
-                if (watchId.current !== null) {
-                    navigator.geolocation.clearWatch(watchId.current);
-                    watchId.current = null;
-                }
             },
-            { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
         );
         setLive(true);
-        setStatus(`🔴 Compartindo en directo (renóvase cada ${minutosTexto()}). Podes paralo cando queiras.`);
+        setStatus(`🔴 En directo (actualízase cada segundos, párase solo en ${minutosTexto()}).`);
     };
 
     return (
@@ -343,15 +357,20 @@ export function MapaClient() {
                 <div className="flex items-center justify-between gap-3 bg-primary/5 border border-primary/25 rounded-xl px-3 py-2.5 animate-in fade-in slide-in-from-top-1">
                     <span className="flex items-center gap-2 text-sm font-medium">
                         <span className="relative flex h-2.5 w-2.5 shrink-0">
-                            <span className="absolute inline-flex h-full w-full rounded-full bg-primary opacity-60 animate-ping" />
+                            {live && <span className="absolute inline-flex h-full w-full rounded-full bg-primary opacity-60 animate-ping" />}
                             <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary" />
                         </span>
-                        Compartindo · queda{' '}
+                        {live ? 'En directo' : 'Compartindo'} · queda{' '}
                         <span className="font-mono font-bold tabular-nums text-primary">
                             {fmtRestante(shareUntil - nowTick)}
                         </span>
                     </span>
-                    <Button size="sm" variant="outline" onClick={stopShare} className="shrink-0">
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={live ? () => stopLive('Deixaches de compartir en directo.') : stopShare}
+                        className="shrink-0"
+                    >
                         Deixar de compartir
                     </Button>
                 </div>

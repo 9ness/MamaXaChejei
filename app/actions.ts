@@ -506,9 +506,11 @@ export async function getFotos(): Promise<Foto[]> {
 const LOC_PREFIX = `${NAMESPACE}:loc:`;
 const LOC_INDEX = `${NAMESPACE}:loc_ids`;
 
-// Duraciones permitidas (estilo WhatsApp): 15, 30 o 60 minutos.
-const ALLOWED_TTL = [900, 1800, 3600];
+// TTL del punto en Redis. Puntual: 15/30/60 min. Directo: valor corto (red de
+// seguridad si el cliente muere; la duración real la controla el cliente).
 const DEFAULT_TTL = 1800; // 30 min
+const MIN_TTL = 30;
+const MAX_TTL = 8 * 60 * 60;
 
 export interface AnonLocation {
     lat: number;
@@ -547,7 +549,7 @@ export async function shareLocation(
     }
     try {
         const id = anonId.slice(0, 40);
-        const ttl = ALLOWED_TTL.includes(ttlSeconds ?? 0) ? (ttlSeconds as number) : DEFAULT_TTL;
+        const ttl = Math.min(Math.max(Math.floor(ttlSeconds ?? DEFAULT_TTL), MIN_TTL), MAX_TTL);
         const payload: AnonLocation = { lat, lng, ts: Date.now() };
         const cleanName = (name ?? '').trim().slice(0, 24);
         if (cleanName) payload.name = cleanName;
