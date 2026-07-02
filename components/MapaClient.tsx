@@ -48,6 +48,26 @@ const COLORES = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#a855f7
 const LIVE_THROTTLE_MS = 4000; // en directo: refresca el punto cada ~4s
 const LIVE_WRITE_TTL = 60;     // segundos que sobrevive el punto sin actualizarse (red de seguridad)
 
+// Sesión de compartido persistida: sobrevive a recargas de página.
+const SESSION_KEY = 'mapa_share';
+type ShareSession = { until: number; live: boolean };
+
+function loadSession(): ShareSession | null {
+    try {
+        const raw = localStorage.getItem(SESSION_KEY);
+        if (!raw) return null;
+        const s = JSON.parse(raw) as ShareSession;
+        if (s && typeof s.until === 'number' && s.until > Date.now()) return s;
+    } catch { /* ignore */ }
+    return null;
+}
+function saveSession(s: ShareSession) {
+    try { localStorage.setItem(SESSION_KEY, JSON.stringify(s)); } catch { /* ignore */ }
+}
+function clearSession() {
+    try { localStorage.removeItem(SESSION_KEY); } catch { /* ignore */ }
+}
+
 function getAnonId(): string {
     let id = localStorage.getItem('anon_id');
     if (!id) {
@@ -120,6 +140,7 @@ export function MapaClient() {
                     stopLive('⌛ Rematou o tempo de compartido en directo.');
                 } else {
                     setShareUntil(null);
+                    clearSession();
                     setStatus('⌛ Rematou o tempo. O teu punto xa non se ve.');
                     refreshPoints();
                 }
@@ -233,10 +254,52 @@ export function MapaClient() {
         }
         setLive(false);
         setShareUntil(null);
+        clearSession();
         const id = getAnonId();
         removeLocation(id).then(refreshPoints);
         if (msg) setStatus(msg);
     }, [refreshPoints]);
+
+    // Arranca (o reanuda) el seguimiento en directo. Reutilizable en toggle y al recargar.
+    const startLiveWatch = useCallback(() => {
+        if (!('geolocation' in navigator)) {
+            setStatus('O teu navegador non soporta xeolocalización.');
+            return false;
+        }
+        lastShare.current = 0; // publicar en canto haxa fix
+        watchId.current = navigator.geolocation.watchPosition(
+            async (pos) => {
+                const now = Date.now();
+                if (now - lastShare.current < LIVE_THROTTLE_MS) return; // refresca cada ~4s
+                lastShare.current = now;
+                await publish(pos.coords.latitude, pos.coords.longitude, { live: true });
+            },
+            (err) => {
+                stopLive(err.code === err.PERMISSION_DENIED
+                    ? '❌ Tes que dar permiso de ubicación no navegador.'
+                    : '❌ Erro co GPS.');
+            },
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
+        );
+        setLive(true);
+        return true;
+    }, [publish, stopLive]);
+
+    // Al recargar la página: retomar la sesión de compartido si sigue activa.
+    useEffect(() => {
+        const s = loadSession();
+        if (!s) return;
+        setShareUntil(s.until);
+        if (s.live) {
+            startLiveWatch();
+            setStatus('🔴 Retomando o directo…');
+        } else {
+            const mins = Math.max(1, Math.ceil((s.until - Date.now()) / 60000));
+            setStatus(`📍 Ubicación compartida activa (~${mins} min restantes).`);
+        }
+        // solo al montar
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const persistPrefs = () => {
         localStorage.setItem('chat_username', nombre);
@@ -250,6 +313,7 @@ export function MapaClient() {
         const id = getAnonId();
         removeLocation(id).then(refreshPoints);
         setShareUntil(null);
+        clearSession();
         setStatus('Deixaches de compartir a túa ubicación.');
     };
 
@@ -265,7 +329,9 @@ export function MapaClient() {
             async (pos) => {
                 await publish(pos.coords.latitude, pos.coords.longitude, { recenter: true, live: false });
                 setBusy(false);
-                setShareUntil(Date.now() + durSecs * 1000);
+                const until = Date.now() + durSecs * 1000;
+                setShareUntil(until);
+                saveSession({ until, live: false });
                 setStatus('✅ Ubicación compartida.');
             },
             (err) => {
@@ -283,29 +349,13 @@ export function MapaClient() {
             stopLive('Deixaches de compartir en directo.');
             return;
         }
-        if (!('geolocation' in navigator)) {
-            setStatus('O teu navegador non soporta xeolocalización.');
-            return;
-        }
         persistPrefs();
-        lastShare.current = 0; // forzar primera publicación inmediata
-        setShareUntil(Date.now() + durSecs * 1000); // el directo se apaga solo al cumplirse la duración
-        watchId.current = navigator.geolocation.watchPosition(
-            async (pos) => {
-                const now = Date.now();
-                if (now - lastShare.current < LIVE_THROTTLE_MS) return; // refresca cada ~4s
-                lastShare.current = now;
-                await publish(pos.coords.latitude, pos.coords.longitude, { live: true });
-            },
-            (err) => {
-                stopLive(err.code === err.PERMISSION_DENIED
-                    ? '❌ Tes que dar permiso de ubicación no navegador.'
-                    : '❌ Erro co GPS.');
-            },
-            { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
-        );
-        setLive(true);
-        setStatus(`🔴 En directo (actualízase cada segundos, párase solo en ${minutosTexto()}).`);
+        const until = Date.now() + durSecs * 1000; // el directo se apaga solo al cumplirse la duración
+        if (startLiveWatch()) {
+            setShareUntil(until);
+            saveSession({ until, live: true });
+            setStatus(`🔴 En directo (actualízase cada segundos, párase solo en ${minutosTexto()}).`);
+        }
     };
 
     return (
