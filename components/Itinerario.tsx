@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ITINERARIO, ITINERARIO_ES_EJEMPLO, type ItinerarioDia } from '@/lib/itinerario';
+import { ITINERARIO, ITINERARIO_PROVISIONAL, type ItinerarioDia } from '@/lib/itinerario';
 import { cn } from '@/lib/utils';
 import { CalendarDays, MapPin, Clock } from 'lucide-react';
 
@@ -59,28 +59,32 @@ export function Itinerario() {
                 <h3 className="text-lg font-bold tracking-tight">Programa da festa</h3>
             </div>
 
-            {ITINERARIO_ES_EJEMPLO && (
+            {ITINERARIO_PROVISIONAL && (
                 <p className="text-center text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-3 py-1 w-fit mx-auto mb-4">
-                    ⚠️ Programa de exemplo — pendente do cartel oficial
+                    📋 Programa do ano pasado · datas 2026 provisionais
                 </p>
             )}
 
-            {/* Selector de día */}
-            <div className="flex gap-2 justify-center mb-6">
-                {ITINERARIO.map((d, i) => (
-                    <button
-                        key={d.fecha}
-                        onClick={() => setActiveIdx(i)}
-                        className={cn(
-                            "px-4 py-2 rounded-full text-sm font-semibold transition-colors border",
-                            i === activeIdx
-                                ? "bg-primary text-primary-foreground border-transparent"
-                                : "bg-card text-muted-foreground border-slate-200 hover:border-slate-300"
-                        )}
-                    >
-                        {d.etiqueta}
-                    </button>
-                ))}
+            {/* Selector de día (desplazable) */}
+            <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 mb-6 snap-x">
+                {ITINERARIO.map((d, i) => {
+                    const numDia = Number(d.fecha.slice(8, 10));
+                    return (
+                        <button
+                            key={d.fecha}
+                            onClick={() => setActiveIdx(i)}
+                            className={cn(
+                                "shrink-0 snap-start flex flex-col items-center justify-center px-3 py-2 rounded-xl border min-w-[62px] transition-colors",
+                                i === activeIdx
+                                    ? "bg-primary text-primary-foreground border-transparent"
+                                    : "bg-card text-muted-foreground border-slate-200 hover:border-slate-300"
+                            )}
+                        >
+                            <span className="text-[11px] font-semibold leading-none">{d.etiqueta}</span>
+                            <span className="text-lg font-black leading-tight">{numDia}</span>
+                        </button>
+                    );
+                })}
             </div>
 
             {/* Timeline */}
@@ -107,27 +111,32 @@ export function Itinerario() {
                                     estado === 'futuro' && "bg-card",
                                 )}
                             >
-                                <div className="flex items-center justify-between gap-2">
-                                    <span className="flex items-center gap-2 font-bold">
-                                        <span className="text-xl">{ev.icono ?? '📌'}</span>
-                                        {ev.titulo}
-                                    </span>
+                                <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                        <span className="flex items-center gap-2 font-bold leading-snug">
+                                            <span className="text-xl shrink-0">{ev.icono ?? '📌'}</span>
+                                            <span>{ev.titulo}</span>
+                                        </span>
+                                        {ev.grupo && (
+                                            <p className="text-sm text-primary font-semibold mt-1 ml-8 leading-snug">{ev.grupo}</p>
+                                        )}
+                                        {ev.lugar && (
+                                            <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1 ml-8">
+                                                <MapPin className="w-3 h-3 shrink-0" /> {ev.lugar}
+                                            </div>
+                                        )}
+                                    </div>
                                     <span className="flex items-center gap-1 text-sm font-mono font-semibold text-primary shrink-0">
                                         <Clock className="w-3.5 h-3.5" /> {ev.hora}
                                     </span>
                                 </div>
-                                {ev.lugar && (
-                                    <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                                        <MapPin className="w-3 h-3" /> {ev.lugar}
-                                    </div>
-                                )}
                                 {estado === 'agora' && (
-                                    <span className="inline-block mt-2 text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+                                    <span className="inline-block mt-2 ml-8 text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-full">
                                         ● Agora mesmo
                                     </span>
                                 )}
                                 {estado === 'proximo' && esHoxe && (
-                                    <span className="inline-block mt-2 text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+                                    <span className="inline-block mt-2 ml-8 text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-full">
                                         Próximo
                                     </span>
                                 )}
