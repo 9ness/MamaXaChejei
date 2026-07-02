@@ -14,7 +14,7 @@ export default function MapaPage() {
                         🗺️ Mapa da festa
                     </h1>
                     <p className="text-sm text-muted-foreground mt-1">
-                        Comparte a túa ubicación para atoparvos na festa.
+                        Praza Castelao (Padrón) · comparte a túa ubicación para atoparvos.
                     </p>
                 </div>
 

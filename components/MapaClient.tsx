@@ -9,8 +9,16 @@ import { MapPin, Radio, Loader2, Users, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { shareLocation, getLocations, removeLocation } from '@/app/actions';
 
-// 📍 Campo da festa (Rianxo). Ajusta estas coordenadas cuando confirmes el punto exacto.
-const FESTA = { lat: 42.6486, lng: -8.8156, label: 'Campo da festa' };
+// 📍 Recinto da festa: Praza Castelao (Padrón). Centro del mapa.
+// Ancla fiable: Concello de Padrón = 42.73837, -8.66048 (OpenStreetMap).
+const FESTA = { lat: 42.7392, lng: -8.66052, label: 'Praza Castelao' };
+
+// Puntos de interés fijos (orquestas, barra, escenario…). Coordenadas APROXIMADAS
+// a partir de la foto marcada; se afinan cuando el usuario dé los puntos exactos.
+const POIS: { lat: number; lng: number; label: string; emoji: string }[] = [
+    { lat: 42.73952, lng: -8.66048, label: 'Orquestra (norte)', emoji: '🎤' },
+    { lat: 42.73888, lng: -8.66055, label: 'Orquestra (sur)', emoji: '🎶' },
+];
 
 const DURACIONES = [
     { label: '15 min', secs: 900 },
@@ -154,21 +162,24 @@ export function MapaClient() {
             if (cancelled || !mapRef.current || mapObj.current) return;
             leafletRef.current = Lm;
 
-            const map = Lm.map(mapRef.current, { zoomControl: true }).setView([FESTA.lat, FESTA.lng], 16);
+            const map = Lm.map(mapRef.current, { zoomControl: true }).setView([FESTA.lat, FESTA.lng], 17);
             Lm.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
                 attribution: '© OpenStreetMap',
             }).addTo(map);
 
-            const festaIcon = Lm.divIcon({
-                html: `<div style="font-size:26px;line-height:1;filter:drop-shadow(0 2px 2px rgba(0,0,0,.4))">🎪</div>`,
-                className: '',
-                iconSize: [30, 30],
-                iconAnchor: [15, 28],
+            // Puntos de interés fijos (orquestas, etc.)
+            POIS.forEach(poi => {
+                const icon = Lm.divIcon({
+                    html: `<div style="font-size:24px;line-height:1;filter:drop-shadow(0 2px 2px rgba(0,0,0,.45))">${poi.emoji}</div>`,
+                    className: '',
+                    iconSize: [28, 28],
+                    iconAnchor: [14, 26],
+                });
+                Lm.marker([poi.lat, poi.lng], { icon })
+                    .addTo(map)
+                    .bindPopup(`<b>${escapeHtml(poi.label)}</b>`);
             });
-            Lm.marker([FESTA.lat, FESTA.lng], { icon: festaIcon })
-                .addTo(map)
-                .bindPopup(`<b>${FESTA.label}</b>`);
 
             layerRef.current = Lm.layerGroup().addTo(map);
             mapObj.current = map;
