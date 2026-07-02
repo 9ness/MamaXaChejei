@@ -133,7 +133,7 @@ export function MemberList({ initialMembers, isAdmin = false }: MemberListProps)
     return (
         <div className="space-y-6">
             {/* Search and Stats */}
-            <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-card p-4 rounded-lg border shadow-sm">
+            <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-card p-4 rounded-xl border">
                 <div className="flex gap-2 w-full md:w-96">
                     <div className="relative flex-1">
                         <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -159,18 +159,20 @@ export function MemberList({ initialMembers, isAdmin = false }: MemberListProps)
                         />
                     </div>
                 </div>
-                <div className="flex gap-6 text-sm font-medium text-muted-foreground w-full md:w-auto justify-around md:justify-end">
-                    <div className="flex flex-col items-center md:items-end p-2 bg-slate-100 rounded-lg min-w-[80px]">
-                        <span className="text-[10px] uppercase tracking-wider text-slate-800">Total</span>
-                        <span className="text-slate-700 font-black text-2xl">{total}</span>
+                <div className="flex items-center gap-5 sm:gap-7 w-full md:w-auto justify-around md:justify-end">
+                    <div className="flex flex-col items-center md:items-end">
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Total</span>
+                        <span className="text-foreground font-bold text-2xl tabular-nums leading-none mt-0.5">{total}</span>
                     </div>
-                    <div className="flex flex-col items-center md:items-end p-2 bg-green-100 rounded-lg min-w-[80px]">
-                        <span className="text-[10px] uppercase tracking-wider text-green-800">Pagados</span>
-                        <span className="text-green-700 font-black text-2xl">{paid}</span>
+                    <div className="h-9 w-px bg-border" />
+                    <div className="flex flex-col items-center md:items-end">
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Pagados</span>
+                        <span className="text-emerald-600 font-bold text-2xl tabular-nums leading-none mt-0.5">{paid}</span>
                     </div>
-                    <div className="flex flex-col items-center md:items-end p-2 bg-blue-100 rounded-lg min-w-[80px]">
-                        <span className="text-[10px] uppercase tracking-wider text-blue-800">Recollidos</span>
-                        <span className="text-blue-700 font-black text-2xl">{picked}</span>
+                    <div className="h-9 w-px bg-border" />
+                    <div className="flex flex-col items-center md:items-end">
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Recollidos</span>
+                        <span className="text-blue-600 font-bold text-2xl tabular-nums leading-none mt-0.5">{picked}</span>
                     </div>
                 </div>
             </div>
@@ -234,33 +236,27 @@ export function MemberList({ initialMembers, isAdmin = false }: MemberListProps)
             )}
 
             {/* Global Quick Filters */}
-            <div className="flex flex-col md:flex-row gap-2">
-                <span className="text-sm font-medium mr-2 hidden md:flex items-center gap-1 text-muted-foreground whitespace-nowrap"><Filter className="w-4 h-4 ml-2" /> Filtros:</span>
+            <div className="flex flex-col md:flex-row md:items-center gap-2">
+                <span className="text-xs font-medium mr-1 hidden md:flex items-center gap-1 text-muted-foreground whitespace-nowrap"><Filter className="w-3.5 h-3.5" /> Filtros</span>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full">
-                    <Button
-                        variant={quickFilter === 'all' ? "secondary" : "outline"}
-                        size="sm"
+                    <button
                         onClick={() => setQuickFilter('all')}
-                        className="w-full"
+                        className={`w-full text-sm font-medium rounded-lg border px-3 py-2 transition-colors ${quickFilter === 'all' ? "bg-foreground text-background border-transparent" : "bg-background text-muted-foreground border-border hover:bg-muted"}`}
                     >
-                        Todos ({total})
-                    </Button>
-                    <Button
-                        variant={quickFilter === 'pendingPayment' ? "secondary" : "outline"}
-                        size="sm"
+                        Todos <span className="tabular-nums opacity-70">({total})</span>
+                    </button>
+                    <button
                         onClick={() => setQuickFilter('pendingPayment')}
-                        className={`w-full ${quickFilter === 'pendingPayment' ? "text-red-700 bg-red-100 ring-1 ring-red-200" : "text-red-600 hover:bg-red-50 hover:text-red-700 border-red-200"}`}
+                        className={`w-full text-sm font-medium rounded-lg border px-3 py-2 transition-colors ${quickFilter === 'pendingPayment' ? "bg-rose-600 text-white border-transparent" : "bg-background text-rose-600 border-rose-200 hover:bg-rose-50"}`}
                     >
-                        Pendentes de Pago ({total - paid})
-                    </Button>
-                    <Button
-                        variant={quickFilter === 'pendingPickup' ? "secondary" : "outline"}
-                        size="sm"
+                        Pendentes de pago <span className="tabular-nums opacity-80">({total - paid})</span>
+                    </button>
+                    <button
                         onClick={() => setQuickFilter('pendingPickup')}
-                        className={`w-full ${quickFilter === 'pendingPickup' ? "text-orange-700 bg-orange-100 ring-1 ring-orange-200" : "text-orange-600 hover:bg-orange-50 hover:text-orange-700 border-orange-200"}`}
+                        className={`w-full text-sm font-medium rounded-lg border px-3 py-2 transition-colors ${quickFilter === 'pendingPickup' ? "bg-amber-600 text-white border-transparent" : "bg-background text-amber-600 border-amber-200 hover:bg-amber-50"}`}
                     >
-                        Pendentes de Recollida ({total - picked})
-                    </Button>
+                        Pendentes de recollida <span className="tabular-nums opacity-80">({total - picked})</span>
+                    </button>
                 </div>
             </div>
 

@@ -397,11 +397,11 @@ export function MemberTable({ members, isAdmin, onToggle, isMobile = false }: Me
         <div className="space-y-4 w-full">
             {/* Toolbar Removed (Now in MemberList) */}
 
-            <div className="rounded-md border">
+            <div className="rounded-xl border overflow-hidden">
                 <Table>
                     <TableHeader>
                         {table.getHeaderGroups().map((headerGroup) => (
-                            <TableRow key={headerGroup.id}>
+                            <TableRow key={headerGroup.id} className="bg-muted/40 hover:bg-muted/40">
                                 {headerGroup.headers.map((header) => {
                                     return (
                                         <TableHead key={header.id} className="px-2 h-9 text-[13px]">
@@ -423,7 +423,7 @@ export function MemberTable({ members, isAdmin, onToggle, isMobile = false }: Me
                                 <TableRow
                                     key={row.id}
                                     data-state={row.getIsSelected() && "selected"}
-                                    className={cn((row.original.pagado && row.original.recogido) && "bg-muted/20")}
+                                    className={cn("hover:bg-muted/30 transition-colors", (row.original.pagado && row.original.recogido) && "bg-muted/20")}
                                 >
                                     {row.getVisibleCells().map((cell) => (
                                         <TableCell key={cell.id} className="px-2 py-1 text-[13px]">

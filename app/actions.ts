@@ -505,15 +505,34 @@ export async function getFotos(): Promise<Foto[]> {
 
 const LOC_PREFIX = `${NAMESPACE}:loc:`;
 const LOC_INDEX = `${NAMESPACE}:loc_ids`;
-const LOC_TTL_SECONDS = 8 * 60 * 60; // el punto caduca solo a las 8 horas
+
+// Duraciones permitidas (estilo WhatsApp): 15, 30 o 60 minutos.
+const ALLOWED_TTL = [900, 1800, 3600];
+const DEFAULT_TTL = 1800; // 30 min
 
 export interface AnonLocation {
     lat: number;
     lng: number;
     ts: number;
+    name?: string;
+    color?: string;
 }
 
-export async function shareLocation(anonId: string, lat: number, lng: number) {
+export interface MapPoint {
+    lat: number;
+    lng: number;
+    name?: string;
+    color?: string;
+}
+
+export async function shareLocation(
+    anonId: string,
+    lat: number,
+    lng: number,
+    name?: string,
+    color?: string,
+    ttlSeconds?: number,
+) {
     // Validación básica de coordenadas
     if (
         typeof lat !== 'number' || typeof lng !== 'number' ||
@@ -524,8 +543,14 @@ export async function shareLocation(anonId: string, lat: number, lng: number) {
     }
     try {
         const id = anonId.slice(0, 40);
+        const ttl = ALLOWED_TTL.includes(ttlSeconds ?? 0) ? (ttlSeconds as number) : DEFAULT_TTL;
         const payload: AnonLocation = { lat, lng, ts: Date.now() };
-        await redis.set(`${LOC_PREFIX}${id}`, JSON.stringify(payload), { ex: LOC_TTL_SECONDS });
+        const cleanName = (name ?? '').trim().slice(0, 24);
+        if (cleanName) payload.name = cleanName;
+        const cleanColor = (color ?? '').trim().slice(0, 24);
+        if (cleanColor) payload.color = cleanColor;
+
+        await redis.set(`${LOC_PREFIX}${id}`, JSON.stringify(payload), { ex: ttl });
         await redis.sadd(LOC_INDEX, id);
         return { success: true };
     } catch {
@@ -544,8 +569,8 @@ export async function removeLocation(anonId: string) {
     }
 }
 
-/** Devuelve solo coordenadas, SIN identificadores (privacidad). */
-export async function getLocations(): Promise<{ lat: number; lng: number }[]> {
+/** Devuelve coordenadas + nombre/color opcionales. Sin IDs (no se sabe qué punto es de quién salvo por el nombre que cada uno elija poner). */
+export async function getLocations(): Promise<MapPoint[]> {
     noStore();
     try {
         const ids = (await redis.smembers(LOC_INDEX)) as string[];
@@ -555,7 +580,7 @@ export async function getLocations(): Promise<{ lat: number; lng: number }[]> {
         ids.forEach(id => pipeline.get(`${LOC_PREFIX}${id}`));
         const results = await pipeline.exec<(AnonLocation | string | null)[]>();
 
-        const points: { lat: number; lng: number }[] = [];
+        const points: MapPoint[] = [];
         const expired: string[] = [];
 
         results.forEach((raw, i) => {
@@ -565,7 +590,7 @@ export async function getLocations(): Promise<{ lat: number; lng: number }[]> {
             }
             const loc = typeof raw === 'string' ? (JSON.parse(raw) as AnonLocation) : (raw as AnonLocation);
             if (loc && typeof loc.lat === 'number' && typeof loc.lng === 'number') {
-                points.push({ lat: loc.lat, lng: loc.lng });
+                points.push({ lat: loc.lat, lng: loc.lng, name: loc.name, color: loc.color });
             }
         });
 
