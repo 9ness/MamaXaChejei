@@ -1,29 +1,33 @@
 import { Countdown } from '@/components/Countdown';
 import { AnnouncementBanner } from '@/components/AnnouncementBanner';
 
-export function Header() {
+interface HeaderProps {
+    variant?: 'full' | 'compact';
+}
+
+export function Header({ variant = 'full' }: HeaderProps) {
+    const isCompact = variant === 'compact';
+
     return (
-        <header className="mb-10 text-center space-y-4">
+        <header className={isCompact ? "mb-6 text-center space-y-2" : "mb-10 text-center space-y-4"}>
             <div className="space-y-1">
-                <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent drop-shadow-sm">
+                <h1 className={`${isCompact ? "text-3xl md:text-4xl" : "text-5xl md:text-7xl"} font-extrabold tracking-tight bg-gradient-to-r from-[hsl(var(--pena-from))] to-[hsl(var(--pena-to))] bg-clip-text text-transparent drop-shadow-sm`}>
                     MAMA XA CHEJEI
                 </h1>
-                <h2 className="text-2xl md:text-3xl font-serif italic text-slate-600 dark:text-slate-300 font-light tracking-wide">
+                <h2 className={`${isCompact ? "text-lg md:text-xl" : "text-2xl md:text-3xl"} font-serif italic text-slate-600 dark:text-slate-300 font-light tracking-wide`}>
                     Guadalupe 2026
                 </h2>
             </div>
 
-            <div className="py-4">
-                <Countdown />
-            </div>
+            {!isCompact && (
+                <div className="py-4">
+                    <Countdown />
+                </div>
+            )}
 
-            <div className="mb-8">
+            <div className="mb-4">
                 <AnnouncementBanner />
             </div>
-
-            <p className="text-muted-foreground font-medium text-lg uppercase tracking-widest text-xs md:text-sm mt-8 mb-2">
-                Lista de Personas Camiseta Peña J26
-            </p>
         </header>
     );
 }

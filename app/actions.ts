@@ -84,7 +84,7 @@ export async function addMember(formData: FormData) {
         await pipeline.exec();
 
         revalidatePath('/');
-        revalidatePath('/admin');
+        revalidatePath('/gestion');
         return { success: true };
     } catch {
         return { msg: 'Error al guardar en base de datos' };
@@ -230,7 +230,7 @@ export async function bulkAddMembers(textData: string) {
         if (count > 0) {
             await pipeline.exec();
             revalidatePath('/');
-            revalidatePath('/admin');
+            revalidatePath('/gestion');
         }
         return { success: true, count };
     } catch (error) {
@@ -250,7 +250,7 @@ export async function deleteAllMembers() {
             await pipeline.exec();
         }
         revalidatePath('/');
-        revalidatePath('/admin');
+        revalidatePath('/gestion');
         return { success: true };
     } catch {
         return { error: 'Error al borrar todo' };
@@ -271,7 +271,7 @@ export async function toggleStatus(id: string, field: 'pagado' | 'recogido', cur
         });
 
         revalidatePath('/');
-        revalidatePath('/admin');
+        revalidatePath('/gestion');
         return { success: true };
     } catch {
         throw new Error(`Failed to toggle ${field}`);
@@ -297,7 +297,7 @@ export async function updateAnnouncement(text: string) {
             await redis.set(ANNOUNCEMENT_KEY, text);
         }
         revalidatePath('/');
-        revalidatePath('/admin');
+        revalidatePath('/gestion');
         return { success: true };
     } catch {
         return { success: false, error: 'Error al actualizar el anuncio' };
@@ -432,5 +432,149 @@ export async function incrementTotalGames(): Promise<number> {
         return newCount;
     } catch {
         return 0;
+    }
+}
+
+// --- COLOR / PALETA DE LA PEÑA ---
+
+const PENA_COLOR_KEY = `${NAMESPACE}:color`;
+
+export async function getPenaColor(): Promise<string> {
+    try {
+        const color = await redis.get(PENA_COLOR_KEY);
+        return (color as string) || 'verde';
+    } catch {
+        return 'verde';
+    }
+}
+
+export async function setPenaColor(key: string) {
+    try {
+        await redis.set(PENA_COLOR_KEY, key);
+        // Afecta a toda la app (nav, títulos, chat...) → revalidar todo.
+        revalidatePath('/', 'layout');
+        return { success: true };
+    } catch {
+        return { success: false, error: 'Error al guardar el color' };
+    }
+}
+
+// --- FOTOS / MURAL DE RECUERDOS ---
+
+const FOTOS_KEY = `${NAMESPACE}:fotos`;
+
+export interface Foto {
+    url: string;
+    ts: number;
+}
+
+export async function addFoto(url: string) {
+    if (!url || typeof url !== 'string' || !url.startsWith('http')) {
+        return { success: false };
+    }
+    try {
+        const foto: Foto = { url: url.slice(0, 500), ts: Date.now() };
+        await redis.lpush(FOTOS_KEY, JSON.stringify(foto));
+        await redis.ltrim(FOTOS_KEY, 0, 299); // conserva las últimas 300
+        revalidatePath('/recuerdos');
+        return { success: true };
+    } catch {
+        return { success: false };
+    }
+}
+
+export async function getFotos(): Promise<Foto[]> {
+    noStore();
+    try {
+        const raw = await redis.lrange(FOTOS_KEY, 0, 299);
+        return raw
+            .map((s: string | object) => {
+                try {
+                    return typeof s === 'object' ? (s as Foto) : (JSON.parse(s) as Foto);
+                } catch {
+                    return null;
+                }
+            })
+            .filter(Boolean) as Foto[];
+    } catch {
+        return [];
+    }
+}
+
+// --- UBICACIONES ANÓNIMAS (MAPA) ---
+
+const LOC_PREFIX = `${NAMESPACE}:loc:`;
+const LOC_INDEX = `${NAMESPACE}:loc_ids`;
+const LOC_TTL_SECONDS = 8 * 60 * 60; // el punto caduca solo a las 8 horas
+
+export interface AnonLocation {
+    lat: number;
+    lng: number;
+    ts: number;
+}
+
+export async function shareLocation(anonId: string, lat: number, lng: number) {
+    // Validación básica de coordenadas
+    if (
+        typeof lat !== 'number' || typeof lng !== 'number' ||
+        Number.isNaN(lat) || Number.isNaN(lng) ||
+        lat < -90 || lat > 90 || lng < -180 || lng > 180 || !anonId
+    ) {
+        return { success: false };
+    }
+    try {
+        const id = anonId.slice(0, 40);
+        const payload: AnonLocation = { lat, lng, ts: Date.now() };
+        await redis.set(`${LOC_PREFIX}${id}`, JSON.stringify(payload), { ex: LOC_TTL_SECONDS });
+        await redis.sadd(LOC_INDEX, id);
+        return { success: true };
+    } catch {
+        return { success: false };
+    }
+}
+
+export async function removeLocation(anonId: string) {
+    try {
+        const id = anonId.slice(0, 40);
+        await redis.del(`${LOC_PREFIX}${id}`);
+        await redis.srem(LOC_INDEX, id);
+        return { success: true };
+    } catch {
+        return { success: false };
+    }
+}
+
+/** Devuelve solo coordenadas, SIN identificadores (privacidad). */
+export async function getLocations(): Promise<{ lat: number; lng: number }[]> {
+    noStore();
+    try {
+        const ids = (await redis.smembers(LOC_INDEX)) as string[];
+        if (!ids || ids.length === 0) return [];
+
+        const pipeline = redis.pipeline();
+        ids.forEach(id => pipeline.get(`${LOC_PREFIX}${id}`));
+        const results = await pipeline.exec<(AnonLocation | string | null)[]>();
+
+        const points: { lat: number; lng: number }[] = [];
+        const expired: string[] = [];
+
+        results.forEach((raw, i) => {
+            if (raw == null) {
+                expired.push(ids[i]); // caducado → limpiar del índice
+                return;
+            }
+            const loc = typeof raw === 'string' ? (JSON.parse(raw) as AnonLocation) : (raw as AnonLocation);
+            if (loc && typeof loc.lat === 'number' && typeof loc.lng === 'number') {
+                points.push({ lat: loc.lat, lng: loc.lng });
+            }
+        });
+
+        if (expired.length > 0) {
+            await redis.srem(LOC_INDEX, ...expired);
+        }
+
+        return points;
+    } catch {
+        return [];
     }
 }

@@ -61,10 +61,9 @@ export function MemberTable({ members, isAdmin, onToggle, isMobile = false }: Me
 
     // Determine visibility based on route
     const pathname = usePathname();
-    const isPublicView = pathname === '/';
-    // Logic: Admin route (/admin) shows ALL columns. Public route (/) hides dates.
-    // User request: "Si la ruta ES /admin... mostrar todas. Si NO ES... ocultar fechas".
-    const showDates = pathname.startsWith('/admin');
+    // Logic: la ruta de gestión (/gestion) muestra TODAS las columnas (fechas incluidas).
+    // La vista pública (/lista) oculta las fechas.
+    const showDates = pathname.startsWith('/gestion');
 
     const handleCheckChange = (id: string, field: 'pagado' | 'recogido', currentValue: boolean) => {
         if (currentValue === true) {

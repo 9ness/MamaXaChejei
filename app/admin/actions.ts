@@ -13,7 +13,7 @@ export async function login(formData: FormData) {
             maxAge: 60 * 60 * 24 * 7, // 1 week
             path: '/',
         });
-        redirect('/admin');
+        redirect('/gestion');
     } else {
         return { error: 'Contraseña incorrecta' };
     }

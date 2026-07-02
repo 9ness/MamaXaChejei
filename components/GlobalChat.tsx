@@ -44,7 +44,7 @@ export function GlobalChat() {
     }, [isOpen]);
 
     const pathname = usePathname();
-    const isAdmin = pathname === '/admin';
+    const isAdmin = pathname === '/gestion';
 
     const [optimisticMessages, addOptimisticAction] = useOptimistic<ChatMessage[], any>(
         messages,
@@ -207,16 +207,16 @@ export function GlobalChat() {
             {!isOpen && (
                 <Button
                     onClick={() => setIsOpen(true)}
-                    className="fixed bottom-4 right-4 md:bottom-6 md:right-6 h-12 w-12 rounded-full shadow-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:scale-105 transition-all z-50 animate-in zoom-in opacity-80 hover:opacity-100"
+                    className="fixed bottom-20 right-4 md:bottom-6 md:right-6 h-12 w-12 rounded-full shadow-xl bg-primary hover:scale-105 transition-all z-50 animate-in zoom-in opacity-80 hover:opacity-100"
                 >
                     <MessageCircle className="h-6 w-6 text-white" />
                 </Button>
             )}
 
             {isOpen && (
-                <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[90vw] max-w-[380px] md:left-auto md:translate-x-0 md:bottom-6 md:right-6 md:w-[400px] h-[600px] max-h-[85vh] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col z-50 animate-in slide-in-from-bottom-5 overflow-hidden font-sans">
+                <div className="fixed bottom-20 left-1/2 -translate-x-1/2 w-[90vw] max-w-[380px] md:left-auto md:translate-x-0 md:bottom-6 md:right-6 md:w-[400px] h-[600px] max-h-[80vh] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col z-50 animate-in slide-in-from-bottom-5 overflow-hidden font-sans">
                     {/* Header */}
-                    <div className="p-3 bg-gradient-to-r from-indigo-600 to-purple-700 text-white flex justify-between items-center shadow-md z-10 shrink-0">
+                    <div className="p-3 bg-gradient-to-r from-[hsl(var(--pena-from))] to-[hsl(var(--pena-to))] text-white flex justify-between items-center shadow-md z-10 shrink-0">
                         <div>
                             <h3 className="font-bold flex items-center gap-2 text-sm">
                                 Mamá, xa chejei. 🍻🙅‍♀️💁‍♀️🎉
