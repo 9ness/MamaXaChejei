@@ -11,13 +11,30 @@ import { shareLocation, getLocations, removeLocation } from '@/app/actions';
 
 // 📍 Recinto da festa: Praza de Castelao (Rianxo). Centro del mapa.
 // Ancla fiable: Concello de Rianxo = 42.65190, -8.81830 (dirección: Praza Castelao).
-const FESTA = { lat: 42.6522, lng: -8.8183, label: 'Praza de Castelao' };
+const FESTA = { lat: 42.6522, lng: -8.8184, label: 'Praza de Castelao' };
 
-// Puntos de interés fijos (orquestas, barra, escenario…). Coordenadas APROXIMADAS
-// a partir de la foto marcada; se afinan cuando el usuario dé los puntos exactos.
-const POIS: { lat: number; lng: number; label: string; emoji: string }[] = [
-    { lat: 42.65255, lng: -8.81828, label: 'Orquestra (norte)', emoji: '🎤' },
-    { lat: 42.65205, lng: -8.81832, label: 'Orquestra (sur)', emoji: '🎶' },
+// Icono SVG de "palco de orquesta de verbena" (escenario con teito e fondo).
+const PALCO_SVG = `
+<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 48 48">
+  <path d="M4 21 L24 8 L44 21 Z" fill="#c81e3a"/>
+  <rect x="5" y="19.5" width="38" height="3" rx="1.5" fill="#a3172d"/>
+  <rect x="8" y="22" width="3" height="15" fill="#5b3a21"/>
+  <rect x="37" y="22" width="3" height="15" fill="#5b3a21"/>
+  <rect x="11" y="22" width="26" height="14" fill="#ffd24a"/>
+  <g fill="#7c2d12">
+    <circle cx="21" cy="31" r="2.1"/>
+    <rect x="22.5" y="24.5" width="1.4" height="6.5"/>
+    <path d="M22.5 24.5c3 0 4 1 4 2.6c-1.4-1-3-.9-4-.6z"/>
+  </g>
+  <rect x="4.5" y="36" width="39" height="5.5" rx="1.5" fill="#374151"/>
+  <rect x="4.5" y="36" width="39" height="2" rx="1" fill="#4b5563"/>
+</svg>`;
+
+// Orquestas: enfrentadas nos dous extremos da praza (unha ao norte, outra ao sur).
+// Coordenadas APROXIMADAS calculadas sobre a foto do mapa; afínanse cos puntos exactos.
+const POIS: { lat: number; lng: number; label: string }[] = [
+    { lat: 42.65247, lng: -8.81843, label: 'Orquestra (norte)' },
+    { lat: 42.65190, lng: -8.81844, label: 'Orquestra (sur)' },
 ];
 
 const DURACIONES = [
@@ -168,13 +185,13 @@ export function MapaClient() {
                 attribution: '© OpenStreetMap',
             }).addTo(map);
 
-            // Puntos de interés fijos (orquestas, etc.)
+            // Puntos de interés fijos (orquestas, etc.) con icono de palco
             POIS.forEach(poi => {
                 const icon = Lm.divIcon({
-                    html: `<div style="font-size:24px;line-height:1;filter:drop-shadow(0 2px 2px rgba(0,0,0,.45))">${poi.emoji}</div>`,
+                    html: `<div style="filter:drop-shadow(0 2px 3px rgba(0,0,0,.5))">${PALCO_SVG}</div>`,
                     className: '',
-                    iconSize: [28, 28],
-                    iconAnchor: [14, 26],
+                    iconSize: [40, 40],
+                    iconAnchor: [20, 38],
                 });
                 Lm.marker([poi.lat, poi.lng], { icon })
                     .addTo(map)
