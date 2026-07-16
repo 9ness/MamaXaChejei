@@ -1,6 +1,7 @@
 'use server';
 
 import { redis } from '@/lib/redis';
+import { cookies } from 'next/headers';
 import { revalidatePath, unstable_noStore as noStore } from 'next/cache';
 import { z } from 'zod';
 
@@ -22,6 +23,13 @@ export type Member = z.infer<typeof MemberSchema>;
 
 const NAMESPACE = 'fiesta';
 const MEMBERS_KEY = `${NAMESPACE}:miembros_zset`; // Sorted Set for ordered IDs
+
+// Misma cookie 'auth' que setea app/admin/actions.ts y ya leen /gestion y el layout.
+// Los server actions son endpoints POST reales: que el botón solo se pinte en
+// /gestion no protege nada, la comprobación tiene que estar aquí.
+async function isAdminRequest() {
+    return (await cookies()).get('auth')?.value === 'true';
+}
 
 export async function getMembers(): Promise<Member[]> {
     try {
@@ -52,46 +60,9 @@ export async function getMembers(): Promise<Member[]> {
     }
 }
 
-export async function addMember(formData: FormData) {
-    const nombre = formData.get('nombre') as string;
-    const apellido1 = formData.get('apellido1') as string;
-    const apellido2 = formData.get('apellido2') as string;
-    const talla = formData.get('talla') as string;
-
-    const id = crypto.randomUUID();
-
-    const newMember: Member = {
-        id,
-        nombre,
-        apellido1,
-        apellido2: apellido2 || '',
-        talla: talla as any,
-        pagado: false,
-        fechaPagado: '',
-        recogido: false,
-        fechaRecogido: '',
-    };
-
-    const parseResult = MemberSchema.safeParse(newMember);
-    if (!parseResult.success) {
-        return { msg: 'Datos inválidos' };
-    }
-
-    try {
-        const pipeline = redis.pipeline();
-        pipeline.zadd(MEMBERS_KEY, { score: Date.now(), member: id });
-        pipeline.hset(`${NAMESPACE}:miembro:${id}`, newMember);
-        await pipeline.exec();
-
-        revalidatePath('/');
-        revalidatePath('/gestion');
-        return { success: true };
-    } catch {
-        return { msg: 'Error al guardar en base de datos' };
-    }
-}
-
 export async function bulkAddMembers(textData: string) {
+    if (!(await isAdminRequest())) return { error: 'No autorizado' };
+
     try {
         const lines = textData.split('\n').filter(line => line.trim() !== '');
 
@@ -239,6 +210,8 @@ export async function bulkAddMembers(textData: string) {
 }
 
 export async function deleteAllMembers() {
+    if (!(await isAdminRequest())) return { error: 'No autorizado' };
+
     try {
         const ids = await redis.zrange(MEMBERS_KEY, 0, -1);
         if (ids.length > 0) {
@@ -258,6 +231,10 @@ export async function deleteAllMembers() {
 }
 
 export async function toggleStatus(id: string, field: 'pagado' | 'recogido', currentValue: boolean) {
+    // Este action ya señaliza errores lanzando (ver su catch), y el llamador
+    // los captura para avisar y pedir recarga. Mantenemos ese contrato.
+    if (!(await isAdminRequest())) throw new Error('No autorizado');
+
     try {
         const memberKey = `${NAMESPACE}:miembro:${id}`;
         const newValue = !currentValue;
@@ -290,6 +267,8 @@ export async function getAnnouncement() {
 }
 
 export async function updateAnnouncement(text: string) {
+    if (!(await isAdminRequest())) return { success: false, error: 'No autorizado' };
+
     try {
         if (!text.trim()) {
             await redis.del(ANNOUNCEMENT_KEY);
@@ -449,6 +428,8 @@ export async function getPenaColor(): Promise<string> {
 }
 
 export async function setPenaColor(key: string) {
+    if (!(await isAdminRequest())) return { success: false, error: 'No autorizado' };
+
     try {
         await redis.set(PENA_COLOR_KEY, key);
         // Afecta a toda la app (nav, títulos, chat...) → revalidar todo.
