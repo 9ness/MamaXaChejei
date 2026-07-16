@@ -1,10 +1,18 @@
 import { redis } from '@/lib/redis';
+import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
 const CHAT_KEY = 'fiesta:chat';
 const PINNED_CHAT_KEY = 'fiesta:chat:pinned';
+
+// Same 'auth' cookie set by app/admin/actions.ts and read by /gestion.
+async function isAdminRequest() {
+    return (await cookies()).get('auth')?.value === 'true';
+}
+
+const unauthorized = () => NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
 export async function GET() {
     try {
@@ -43,11 +51,14 @@ export async function GET() {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { nombre, mensaje, id, isAdmin } = body;
+        const { nombre, mensaje, id } = body;
 
         if (!nombre || !mensaje) {
             return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
         }
+
+        // Never trust the client: the admin flag comes from the cookie, not the body.
+        const isAdmin = await isAdminRequest();
 
         // Apply visual distinction for admin
         const finalNombre = isAdmin ? `${nombre} (Admin)` : nombre;
@@ -84,6 +95,8 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
     try {
+        if (!(await isAdminRequest())) return unauthorized();
+
         const { id } = await request.json();
         if (!id) return NextResponse.json({ error: 'Missing ID' }, { status: 400 });
 
@@ -144,12 +157,14 @@ export async function PATCH(request: Request) {
         const { action, id, emoji, payload } = body;
 
         if (action === 'pin') {
+            if (!(await isAdminRequest())) return unauthorized();
             if (!payload) return NextResponse.json({ error: 'Missing payload for pin' }, { status: 400 });
             await redis.set(PINNED_CHAT_KEY, JSON.stringify(payload));
             return NextResponse.json({ success: true });
         }
 
         if (action === 'unpin') {
+            if (!(await isAdminRequest())) return unauthorized();
             await redis.del(PINNED_CHAT_KEY);
             return NextResponse.json({ success: true });
         }
