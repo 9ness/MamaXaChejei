@@ -5,7 +5,7 @@ import 'leaflet/dist/leaflet.css';
 import type * as L from 'leaflet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { MapPin, Radio, Loader2, Users, Check } from 'lucide-react';
+import { MapPin, Radio, Loader2, Users, Check, Share2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { shareLocation, getLocations, removeLocation } from '@/app/actions';
 
@@ -104,10 +104,13 @@ export function MapaClient() {
     const mapObj = useRef<L.Map | null>(null);
     const leafletRef = useRef<typeof L | null>(null);
     const layerRef = useRef<L.LayerGroup | null>(null);
+    const targetRef = useRef<L.Marker | null>(null);
     const watchId = useRef<number | null>(null);
     const lastShare = useRef<number>(0);
+    const lastPos = useRef<{ lat: number; lng: number } | null>(null);
 
     const [count, setCount] = useState(0);
+    const [mapReady, setMapReady] = useState(false);
     const [live, setLive] = useState(false);
     const [busy, setBusy] = useState(false);
     const [status, setStatus] = useState<string>('');
@@ -221,6 +224,7 @@ export function MapaClient() {
 
             layerRef.current = Lm.layerGroup().addTo(map);
             mapObj.current = map;
+            setMapReady(true);
 
             setTimeout(() => map.invalidateSize(), 100);
             await refreshPoints();
@@ -242,6 +246,7 @@ export function MapaClient() {
         // En directo el punto se reescribe cada pocos segundos con TTL corto;
         // el puntual usa el TTL completo (15/30/60 min).
         const ttl = opts.live ? LIVE_WRITE_TTL : durSecs;
+        lastPos.current = { lat, lng };
         await shareLocation(id, lat, lng, nombre, color, ttl, opts.live);
         if (opts.recenter && mapObj.current) mapObj.current.setView([lat, lng], 17);
         await refreshPoints();
@@ -300,6 +305,75 @@ export function MapaClient() {
         // solo al montar
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // Enlace compartido: /mapa?p=lat,lng&n=nombre → centra y marca ese punto.
+    useEffect(() => {
+        if (!mapReady) return;
+        const Lm = leafletRef.current;
+        const map = mapObj.current;
+        if (!Lm || !map || targetRef.current) return;
+        const sp = new URLSearchParams(window.location.search);
+        const p = sp.get('p');
+        if (!p) return;
+        const [la, ln] = p.split(',').map(Number);
+        if (!isFinite(la) || !isFinite(ln)) return;
+        const nm = sp.get('n') || '';
+        const icon = Lm.divIcon({
+            html: `<div class="mxc-target">📍</div>`,
+            className: '',
+            iconSize: [40, 40],
+            iconAnchor: [20, 38],
+        });
+        const m = Lm.marker([la, ln], { icon, zIndexOffset: 1000 }).addTo(map);
+        m.bindTooltip(nm ? escapeHtml(nm) : 'Aquí', {
+            permanent: true,
+            direction: 'top',
+            offset: [0, -34],
+            className: 'mxc-tooltip',
+        });
+        targetRef.current = m;
+        map.setView([la, ln], 18);
+        setStatus(nm
+            ? `📍 ${nm} compartiu a súa ubicación aquí.`
+            : '📍 Alguén da peña compartiu a súa ubicación aquí.');
+    }, [mapReady]);
+
+    // Obtiene la posición actual (para compartir tras recargar, sin punto en memoria).
+    const getPos = () => new Promise<{ lat: number; lng: number }>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+            (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+            reject,
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 },
+        );
+    });
+
+    // Comparte por WhatsApp / hoja nativa un enlace al mapa centrado en tu punto.
+    const shareWhatsApp = async () => {
+        let pos = lastPos.current;
+        if (!pos) {
+            if (!('geolocation' in navigator)) {
+                setStatus('O teu navegador non soporta xeolocalización.');
+                return;
+            }
+            setStatus('Obtendo a túa posición para compartir…');
+            try { pos = await getPos(); } catch {
+                setStatus('❌ Non se puido obter a ubicación para compartir.');
+                return;
+            }
+        }
+        const u = new URL(window.location.origin + '/mapa');
+        u.searchParams.set('p', `${pos.lat.toFixed(5)},${pos.lng.toFixed(5)}`);
+        if (nombre) u.searchParams.set('n', nombre);
+        if (color) u.searchParams.set('c', color);
+        const url = u.toString();
+        const text = 'Ola! Compartín a miña ubicación na festa 📍 Estou aquí 👇';
+
+        if (typeof navigator.share === 'function') {
+            try { await navigator.share({ title: 'A miña ubicación', text, url }); } catch { /* cancelado */ }
+            return;
+        }
+        window.open(`https://wa.me/?text=${encodeURIComponent(`${text}\n${url}`)}`, '_blank');
+    };
 
     const persistPrefs = () => {
         localStorage.setItem('chat_username', nombre);
@@ -432,7 +506,7 @@ export function MapaClient() {
 
             {/* Compartido activo (puntual): cuenta atrás + quitar */}
             {shareUntil !== null && (
-                <div className="flex items-center justify-between gap-3 bg-primary/5 border border-primary/25 rounded-xl px-3 py-2.5 animate-in fade-in slide-in-from-top-1">
+                <div className="flex flex-wrap items-center justify-between gap-2 bg-primary/5 border border-primary/25 rounded-xl px-3 py-2.5 animate-in fade-in slide-in-from-top-1">
                     <span className="flex items-center gap-2 text-sm font-medium">
                         <span className="relative flex h-2.5 w-2.5 shrink-0">
                             {live && <span className="absolute inline-flex h-full w-full rounded-full bg-primary opacity-60 animate-ping" />}
@@ -443,14 +517,18 @@ export function MapaClient() {
                             {fmtRestante(shareUntil - nowTick)}
                         </span>
                     </span>
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={live ? () => stopLive('Deixaches de compartir en directo.') : stopShare}
-                        className="shrink-0"
-                    >
-                        Deixar de compartir
-                    </Button>
+                    <div className="flex items-center gap-2 shrink-0">
+                        <Button size="sm" onClick={shareWhatsApp} className="gap-1.5">
+                            <Share2 className="w-4 h-4" /> Compartir
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={live ? () => stopLive('Deixaches de compartir en directo.') : stopShare}
+                        >
+                            Quitar
+                        </Button>
+                    </div>
                 </div>
             )}
 
