@@ -366,7 +366,7 @@ export function MapaClient() {
         if (nombre) u.searchParams.set('n', nombre);
         if (color) u.searchParams.set('c', color);
         const url = u.toString();
-        const text = 'Ola! Compartín a miña ubicación na festa 📍 Estou aquí 👇';
+        const text = 'Ehh, tou eu aquíí!!! 📍👇';
 
         if (typeof navigator.share === 'function') {
             try { await navigator.share({ title: 'A miña ubicación', text, url }); } catch { /* cancelado */ }
