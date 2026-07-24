@@ -5,7 +5,7 @@ import 'leaflet/dist/leaflet.css';
 import type * as L from 'leaflet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { MapPin, Radio, Loader2, Users, Check, Share2 } from 'lucide-react';
+import { MapPin, Radio, Loader2, Users, Check, Share2, LocateFixed } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { shareLocation, getLocations, removeLocation } from '@/app/actions';
 
@@ -30,11 +30,34 @@ const PALCO_SVG = `
   <rect x="4.5" y="36" width="39" height="2" rx="1" fill="#4b5563"/>
 </svg>`;
 
+// Cangrexo de festa: marca un campo de festas distinto (p.ex. Taragoña) para
+// que non se confunda co palco de orquestra nin cos puntos da xente.
+const CANGREXO_SVG = `
+<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 48 48">
+  <g stroke="#b91c1c" stroke-width="2.2" stroke-linecap="round" fill="none">
+    <path d="M9 20 L2 13"/><path d="M39 20 L46 13"/>
+    <path d="M11 34 L5 39"/><path d="M14 37 L10 43"/>
+    <path d="M37 34 L43 39"/><path d="M34 37 L38 43"/>
+  </g>
+  <ellipse cx="9" cy="12" rx="3.4" ry="4.4" fill="#ef4444" stroke="#b91c1c" stroke-width="1.6"/>
+  <ellipse cx="39" cy="12" rx="3.4" ry="4.4" fill="#ef4444" stroke="#b91c1c" stroke-width="1.6"/>
+  <ellipse cx="24" cy="27" rx="19" ry="14" fill="#ef4444" stroke="#b91c1c" stroke-width="2"/>
+  <circle cx="17" cy="23" r="3" fill="#fff"/><circle cx="17" cy="23" r="1.4" fill="#111"/>
+  <circle cx="31" cy="23" r="3" fill="#fff"/><circle cx="31" cy="23" r="1.4" fill="#111"/>
+  <path d="M18 32c3 2.4 9 2.4 12 0" stroke="#7f1d1d" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+  <g fill="#facc15"><circle cx="6" cy="4" r="2"/><circle cx="24" cy="1" r="2"/><circle cx="42" cy="4" r="2"/></g>
+  <g fill="#a855f7"><circle cx="14" cy="2.5" r="1.6"/><circle cx="34" cy="2.5" r="1.6"/></g>
+</svg>`;
+
+type Poi = { lat: number; lng: number; label: string; icon?: string; size?: number };
+
 // Orquestas: enfrentadas nos dous extremos da praza (unha ao norte, outra ao sur).
 // Coordenadas APROXIMADAS calculadas sobre a foto do mapa; afínanse cos puntos exactos.
-const POIS: { lat: number; lng: number; label: string }[] = [
+const POIS: Poi[] = [
     { lat: 42.65247, lng: -8.81843, label: 'Orquestra (norte)' },
     { lat: 42.65190, lng: -8.81844, label: 'Orquestra (sur)' },
+    // Campo de festas de Taragoña (Campo Maneiro), preto de Rianxo.
+    { lat: 42.68390, lng: -8.82525, label: 'Festas de Taragoña · Campo Maneiro', icon: CANGREXO_SVG },
 ];
 
 const DURACIONES = [
@@ -114,6 +137,7 @@ export function MapaClient() {
     const [mapReady, setMapReady] = useState(false);
     const [live, setLive] = useState(false);
     const [busy, setBusy] = useState(false);
+    const [locating, setLocating] = useState(false);
     const [status, setStatus] = useState<string>('');
 
     // Compartido puntual: hasta cuándo dura (para cuenta atrás + botón de quitar)
@@ -222,13 +246,14 @@ export function MapaClient() {
                 attribution: '© OpenStreetMap',
             }).addTo(map);
 
-            // Puntos de interés fijos (orquestas, etc.) con icono de palco
+            // Puntos de interés fijos (orquestas, campos de festas, etc.)
             POIS.forEach(poi => {
+                const size = poi.size ?? 40;
                 const icon = Lm.divIcon({
-                    html: `<div style="filter:drop-shadow(0 2px 3px rgba(0,0,0,.5))">${PALCO_SVG}</div>`,
+                    html: `<div style="filter:drop-shadow(0 2px 3px rgba(0,0,0,.5))">${poi.icon ?? PALCO_SVG}</div>`,
                     className: '',
-                    iconSize: [40, 40],
-                    iconAnchor: [20, 38],
+                    iconSize: [size, size],
+                    iconAnchor: [size / 2, size - 2],
                 });
                 Lm.marker([poi.lat, poi.lng], { icon })
                     .addTo(map)
@@ -388,6 +413,23 @@ export function MapaClient() {
             return;
         }
         window.open(`https://wa.me/?text=${encodeURIComponent(`${text}\n${url}`)}`, '_blank');
+    };
+
+    // Vai á miña ubicación actual no mapa, sen compartir nada con ninguén.
+    const handleLocateMe = async () => {
+        if (!('geolocation' in navigator)) {
+            setStatus('O teu navegador non soporta xeolocalización.');
+            return;
+        }
+        setLocating(true);
+        try {
+            const pos = await getPos();
+            mapObj.current?.setView([pos.lat, pos.lng], 17);
+        } catch {
+            setStatus('❌ Non se puido obter a túa ubicación.');
+        } finally {
+            setLocating(false);
+        }
     };
 
     const persistPrefs = () => {
@@ -567,10 +609,22 @@ export function MapaClient() {
                 <p className="text-xs text-center bg-muted/60 rounded-lg px-3 py-2">{status}</p>
             )}
 
-            <div
-                ref={mapRef}
-                className="w-full h-[55vh] min-h-[340px] rounded-xl border shadow-sm overflow-hidden z-0"
-            />
+            <div className="relative">
+                <div
+                    ref={mapRef}
+                    className="w-full h-[55vh] min-h-[340px] rounded-xl border shadow-sm overflow-hidden z-0"
+                />
+                <button
+                    onClick={handleLocateMe}
+                    disabled={locating}
+                    aria-label="Ir á miña ubicación"
+                    className="absolute bottom-3 right-3 z-[400] w-10 h-10 rounded-full bg-card border shadow-md flex items-center justify-center active:scale-95 transition-transform disabled:opacity-60"
+                >
+                    {locating
+                        ? <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                        : <LocateFixed className="w-5 h-5 text-primary" />}
+                </button>
+            </div>
 
             <p className="text-[11px] text-muted-foreground text-center leading-relaxed">
                 🔒 Privado da peña: só se garda o teu punto (co nome que ti elixas) e desaparece só ao rematar o tempo. Se non pos nome, o teu punto é anónimo.
