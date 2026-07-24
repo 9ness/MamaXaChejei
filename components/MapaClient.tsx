@@ -105,6 +105,7 @@ export function MapaClient() {
     const leafletRef = useRef<typeof L | null>(null);
     const layerRef = useRef<L.LayerGroup | null>(null);
     const targetRef = useRef<L.Marker | null>(null);
+    const targetPos = useRef<{ lat: number; lng: number } | null>(null);
     const watchId = useRef<number | null>(null);
     const lastShare = useRef<number>(0);
     const lastPos = useRef<{ lat: number; lng: number } | null>(null);
@@ -191,6 +192,18 @@ export function MapaClient() {
                 });
             }
         });
+
+        // Si el punto del enlace (?p=) coincide con un punto real ya en el mapa,
+        // quita el pin del enlace para no verlo duplicado (el real se actualiza).
+        if (targetRef.current && targetPos.current) {
+            const t = targetPos.current;
+            const dup = points.some(p => map.distance([p.lat, p.lng], [t.lat, t.lng]) < 30);
+            if (dup) {
+                targetRef.current.remove();
+                targetRef.current = null;
+            }
+        }
+
         setCount(points.length);
     }, []);
 
@@ -324,6 +337,7 @@ export function MapaClient() {
             iconSize: [40, 40],
             iconAnchor: [20, 38],
         });
+        targetPos.current = { lat: la, lng: ln };
         const m = Lm.marker([la, ln], { icon, zIndexOffset: 1000 }).addTo(map);
         m.bindTooltip(nm ? escapeHtml(nm) : 'Aquí', {
             permanent: true,
@@ -336,7 +350,8 @@ export function MapaClient() {
         setStatus(nm
             ? `📍 ${nm} compartiu a súa ubicación aquí.`
             : '📍 Alguén da peña compartiu a súa ubicación aquí.');
-    }, [mapReady]);
+        refreshPoints(); // por si el punto real ya está: dedupe inmediato
+    }, [mapReady, refreshPoints]);
 
     // Obtiene la posición actual (para compartir tras recargar, sin punto en memoria).
     const getPos = () => new Promise<{ lat: number; lng: number }>((resolve, reject) => {
