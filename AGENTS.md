@@ -259,8 +259,11 @@ store Blob). PENDIENTE: confirmar si conviene crear un `.env.example`.
 12. **`components.json` declara `tailwind.config: ""`** aunque existe
     `tailwind.config.js` (Tailwind **3.4**, no 4). Si añades componentes shadcn
     con la CLI, revisa que no te reescriba la config ni el `globals.css`.
-13. **`app/layout.tsx` sigue con la metadata por defecto** de create-next-app
-    ("Create Next App"). PENDIENTE: confirmar título/descripción reales.
+13. **Iconos y PWA:** `app/icon.png`, `app/apple-icon.png` y `app/favicon.ico`
+    salen del escudo MXC; `app/manifest.ts` define nombre ("Mamá xa Chejei"),
+    `short_name` MXC y los iconos de `public/icon-*.png`. El `.ico` tiene que
+    llevar PNG en **RGBA** o Turbopack revienta el build al procesarlo. El
+    icono maskable lleva margen porque Android recorta a círculo.
 14. **`public/man*.png` pesan ~2 MB cada uno** (7 sprites, ~13 MB). Si tocas el
     juego, no añadas más peso sin optimizar.
 15. **La paleta se inyecta con `dangerouslySetInnerHTML`** en el `<head>` desde

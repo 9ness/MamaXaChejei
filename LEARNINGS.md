@@ -25,4 +25,6 @@
 * [2026-09-04] Admin en dos piezas: cookie `admin_device` (1 año, "sé el PIN") y cookie `auth` (modo admin encendido) / el gesto de 5 toques deja de ser un login y pasa a ser un interruptor, y el PIN solo se marca en un móvil nuevo.
 * [2026-09-04] Firmar dos cookies con el mismo secreto sin meter el scope en el HMAC deja copiar el token de dispositivo (1 año) en la cookie de sesión / se firma `<scope>.<exp>`, no `<exp>` a secas.
 * [2026-09-04] DEUDA CONSCIENTE — `setupPin` no pide nada: mientras `fiesta:admin_pin` no exista, quien descubra el gesto se queda de admin. La ventana va del despliegue a la primera configuración; ciérrala poniendo el PIN al momento.
+* [2026-09-04] Turbopack falla el build con `app/favicon.ico` si los PNG embebidos son RGB ("The PNG is not in RGBA format!") / `Image.convert('RGBA')` antes de guardar el .ico con Pillow.
+* [2026-09-04] Icono PWA maskable: Android lo recorta a círculo/squircle, así que el escudo va al 60% del lienzo con fondo blanco; el icono `any` puede ir al 86%.
 
