@@ -16,3 +16,13 @@
 * [2026-07-16] DEUDA CONSCIENTE — los blobs se acumulan en el bucket para siempre: el `ltrim` a 300 recorta la lista de Redis, no el almacenamiento. Coste lento, sin limpieza; no es brecha.
 * [2026-07-16] DEUDA CONSCIENTE — `login` (`app/admin/actions.ts`) no tiene rate limit: se mitiga con un `ADMIN_PASSWORD` largo y aleatorio en Vercel. La entropía mata la fuerza bruta sin código ni riesgo de autobloquearte (misma IP compartida del wifi). Si algún día se pone un límite, que resetee al acertar.
 * [2026-07-16] Antes de tocar nada irreversible (`deleteAllMembers` estaba abierto), backup primero: `npx vercel env pull .env.local` + volcado con SCAN/TYPE por tipo. Ojo: `lib/redis.ts` falla en silencio sin envs y te devuelve un backup VACÍO que parece válido — comprueba siempre el recuento.
+* [2026-09-04] Auth: la cookie valía literalmente `auth=true` sin firmar — httpOnly frena a JS, no a quien la escribe en DevTools o manda `curl -H "Cookie: auth=true"` / cookie firmada con HMAC (`<exp>.<firma>`, secreto en `fiesta:admin_secret`) y un único `isAdmin()` en `lib/admin-auth.ts`.
+* [2026-09-04] Un PIN de 4 dígitos son 10.000 combinaciones: sin rate limit no es una clave, es una formalidad / 10 intentos por IP cada 15 min, con reset al acertar para no autobloquearse en el wifi compartido de la fiesta.
+* [2026-09-04] Auth que falla en ABIERTO es un agujero: `isAdmin()` devuelve false si Redis no responde, al revés que el resto de la app (que devuelve `[]` para no romper la página).
+* [2026-09-04] `lib/admin-pin.ts` importa `crypto` y Redis, así que no puede entrar en un bundle de cliente / las constantes compartidas (`PIN_LENGTH`, `PIN_REGEX`) viven aparte en `lib/admin-pin-config.ts`.
+* [2026-09-04] Auto-enviar el PIN al cuarto dígito desde un `useEffect` lo caza el lint de React 19 (`set-state-in-effect`) / se envía desde el propio `onChange` del teclado.
+* [2026-09-04] DEUDA CONSCIENTE — el PIN se guarda hasheado (scrypt + salt), pero con 4 dígitos quien tenga un volcado de Redis lo revienta offline; el hash solo evita leerlo a simple vista.
+* [2026-09-04] Admin en dos piezas: cookie `admin_device` (1 año, "sé el PIN") y cookie `auth` (modo admin encendido) / el gesto de 5 toques deja de ser un login y pasa a ser un interruptor, y el PIN solo se marca en un móvil nuevo.
+* [2026-09-04] Firmar dos cookies con el mismo secreto sin meter el scope en el HMAC deja copiar el token de dispositivo (1 año) en la cookie de sesión / se firma `<scope>.<exp>`, no `<exp>` a secas.
+* [2026-09-04] DEUDA CONSCIENTE — `setupPin` no pide nada: mientras `fiesta:admin_pin` no exista, quien descubra el gesto se queda de admin. La ventana va del despliegue a la primera configuración; ciérrala poniendo el PIN al momento.
+

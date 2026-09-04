@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { cookies } from "next/headers";
+import { isAdmin as isAdminSession } from "@/lib/admin-auth";
 import "./globals.css";
 import { GlobalChat } from "@/components/GlobalChat";
 import { BottomNav } from "@/components/BottomNav";
@@ -27,7 +27,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const isAdmin = (await cookies()).get('auth')?.value === 'true';
+  const isAdmin = await isAdminSession();
   const penaColor = await getPenaColor();
 
   return (

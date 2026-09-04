@@ -2,21 +2,22 @@ import { getMembers, getPenaColor } from '@/app/actions';
 import { MemberList } from '@/components/MemberList';
 import { LoginForm } from '@/components/LoginForm';
 import { AnnouncementForm } from '@/components/AnnouncementForm';
-import { cookies } from 'next/headers';
+import { isAdmin } from '@/lib/admin-auth';
 import { Button } from '@/components/ui/button';
 import { logout } from '@/app/admin/actions';
 import { AdminControls } from '@/components/AdminControls';
 import { PenaColorPicker } from '@/components/PenaColorPicker';
 import { Header } from '@/components/Header';
+import { ChangePinForm } from '@/components/ChangePinForm';
+import { isPinSet } from '@/lib/admin-pin';
 
 export const dynamic = 'force-dynamic';
 
 export default async function GestionPage() {
-    const cookieStore = await cookies();
-    const isAuthenticated = cookieStore.get('auth')?.value === 'true';
+    const hasPin = await isPinSet();
 
-    if (!isAuthenticated) {
-        return <LoginForm />;
+    if (!(await isAdmin())) {
+        return <LoginForm hasPin={hasPin} />;
     }
 
     const members = await getMembers();
@@ -51,6 +52,10 @@ export default async function GestionPage() {
 
                 <div className="mt-8">
                     <PenaColorPicker current={penaColor} />
+                </div>
+
+                <div className="mt-8">
+                    <ChangePinForm hasPin={hasPin} />
                 </div>
 
                 <AdminControls />

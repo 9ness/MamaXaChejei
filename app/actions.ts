@@ -1,7 +1,7 @@
 'use server';
 
 import { redis } from '@/lib/redis';
-import { cookies } from 'next/headers';
+import { isAdmin } from '@/lib/admin-auth';
 import { revalidatePath, unstable_noStore as noStore } from 'next/cache';
 import { z } from 'zod';
 
@@ -24,12 +24,9 @@ export type Member = z.infer<typeof MemberSchema>;
 const NAMESPACE = 'fiesta';
 const MEMBERS_KEY = `${NAMESPACE}:miembros_zset`; // Sorted Set for ordered IDs
 
-// Misma cookie 'auth' que setea app/admin/actions.ts y ya leen /gestion y el layout.
 // Los server actions son endpoints POST reales: que el botón solo se pinte en
 // /gestion no protege nada, la comprobación tiene que estar aquí.
-async function isAdminRequest() {
-    return (await cookies()).get('auth')?.value === 'true';
-}
+const isAdminRequest = isAdmin;
 
 export async function getMembers(): Promise<Member[]> {
     try {

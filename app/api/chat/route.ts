@@ -1,5 +1,5 @@
 import { redis } from '@/lib/redis';
-import { cookies } from 'next/headers';
+import { isAdmin as isAdminSession } from '@/lib/admin-auth';
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
@@ -7,10 +7,8 @@ export const dynamic = 'force-dynamic';
 const CHAT_KEY = 'fiesta:chat';
 const PINNED_CHAT_KEY = 'fiesta:chat:pinned';
 
-// Same 'auth' cookie set by app/admin/actions.ts and read by /gestion.
-async function isAdminRequest() {
-    return (await cookies()).get('auth')?.value === 'true';
-}
+// Misma sesión firmada que usan /gestion y los server actions.
+const isAdminRequest = isAdminSession;
 
 const unauthorized = () => NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 

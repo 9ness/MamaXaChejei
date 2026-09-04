@@ -77,6 +77,7 @@ Scripts de mantenimiento sobre Redis (`tsx`, leen `.env.local`):
 npx tsx scripts/seed-data.ts          # ⚠️ BORRA y repuebla miembros (ver gotcha 2)
 npx tsx scripts/reset-score.ts        # pone el récord del juego a 0
 npx tsx scripts/force-reset-score.ts  # reset del récord + verificación por consola
+npx tsx scripts/set-admin-pin.ts 1234 # pone el PIN de admin y cierra sesiones abiertas
 ```
 
 **Tests:** no existen. **CI:** no existe. PENDIENTE: confirmar si se quieren.
@@ -98,7 +99,7 @@ app/
   lista/page.tsx      # lista pública de miembros (solo lectura)
   gestion/page.tsx    # panel admin (login por cookie) — alta/edición, anuncio, color
   admin/page.tsx      # redirect → /gestion
-  admin/actions.ts    # login/logout: compara con ADMIN_PASSWORD, set cookie httpOnly
+  admin/actions.ts    # setupPin/loginWithPin/enable|disableAdminMode/changePin/logout
   mapa/page.tsx       # mapa Leaflet (MapaClient)
   recuerdos/page.tsx  # mural de fotos
   api/chat/route.ts   # GET/POST/DELETE/PATCH del chat (pin, unpin, react)
@@ -112,12 +113,20 @@ components/
   BeerGame.tsx (519)     # minijuego
   Itinerario.tsx, Countdown.tsx, Header.tsx, BottomNav.tsx,
   AnnouncementForm.tsx, AnnouncementBanner.tsx, AdminControls.tsx,
-  PenaColorPicker.tsx, LoginForm.tsx, FotosClient.tsx
+  PenaColorPicker.tsx, LoginForm.tsx, FotosClient.tsx,
+  SecretAdminGate.tsx   # 5 toques en el título de Header → interruptor admin
+  AdminPinFlow.tsx      # flujo del PIN (marcar / crear+repetir), compartido
+  PinPad.tsx            # teclado numérico controlado (login y cambio de PIN)
+  ChangePinForm.tsx     # cambiar el PIN desde /gestion
   ui/                 # shadcn generado (no editar a mano salvo necesidad)
 lib/
   redis.ts            # cliente Upstash único (con cliente dummy si faltan envs)
   itinerario.ts       # ⚠️ DATOS del cartel, hardcodeados. 2026 es PROVISIONAL
   pena-colors.ts      # presets de paleta → variables CSS
+  admin-auth.ts       # ⭐ isAdmin(): cookie de sesión firmada con HMAC
+  admin-pin.ts        # PIN de admin en Redis (scrypt + salt)
+  admin-pin-config.ts # constantes del PIN compartidas con el cliente
+  rate-limit.ts       # ventana fija sobre Redis + IP del cliente
   utils.ts            # cn()
 scripts/              # tsx sueltos contra Redis (seed / reset récord)
 public/               # sprites del juego (man*.png, ~2 MB cada uno)
@@ -139,10 +148,12 @@ public/               # sprites del juego (man*.png, ~2 MB cada uno)
 | `fiesta:fotos` | LIST | URLs del mural |
 | `fiesta:loc:<anonId>` | STRING + TTL | punto del mapa (15/30/60 min o directo) |
 | `fiesta:loc_ids` | SET | índice de puntos (se auto-limpia al leer caducados) |
+| `fiesta:admin_pin` | HASH | `{salt, hash}` del PIN de admin (scrypt) |
+| `fiesta:admin_secret` | STRING | secreto HMAC con el que se firma la cookie de sesión |
 
 **Variables de entorno** (en `.env.local`, ignorado por git — no hay
 `.env.example`): `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`,
-`ADMIN_PASSWORD`, `BLOB_READ_WRITE_TOKEN` (lo inyecta Vercel al conectar el
+`ADMIN_PASSWORD` (solo como arranque, hasta que haya PIN), `BLOB_READ_WRITE_TOKEN` (lo inyecta Vercel al conectar el
 store Blob). PENDIENTE: confirmar si conviene crear un `.env.example`.
 
 ---
@@ -204,11 +215,21 @@ store Blob). PENDIENTE: confirmar si conviene crear un `.env.example`.
    `pathname === '/gestion'` y lo manda en el body; `app/api/chat/route.ts` se
    fía de ese flag sin comprobar la cookie. DELETE y PATCH (pin/unpin/react)
    tampoco verifican auth. No asumas que el chat está protegido.
-5. **La única auth real** es la cookie `auth=true` (httpOnly, 7 días) que pone
-   `app/admin/actions.ts` comparando con `ADMIN_PASSWORD`. La comprueban
-   `app/gestion/page.tsx` y `app/layout.tsx`. **No hay middleware**, así que la
-   protección es página a página: cualquier ruta o action nuevo que sea de
-   admin debe comprobar la cookie por su cuenta.
+5. **Auth: DOS cookies firmadas** (httpOnly, valor `<caducidad>.<HMAC>`, el
+   scope entra en la firma), secreto en `fiesta:admin_secret`:
+   `auth` (7 días) = modo admin encendido AHORA; `admin_device` (1 año) = este
+   móvil ya marcó el PIN. Fuentes de verdad: `isAdmin()` e `isTrustedDevice()`
+   de `lib/admin-auth.ts` — úsalas siempre, no compares cookies a mano (antes
+   valía `auth=true` a pelo y cualquiera la escribía). **No hay middleware**:
+   cualquier ruta o action nuevo de admin debe llamar a `isAdmin()` por su
+   cuenta. Borrar `fiesta:admin_secret` echa a todos los dispositivos.
+   Entrada: 5 toques en el título de `Header` (`SecretAdminGate`). Sin PIN en
+   Redis pide crearlo (`setupPin`, solo mientras `fiesta:admin_pin` no exista);
+   con PIN pide marcarlo; y en un móvil ya de confianza el gesto solo enciende
+   y apaga el modo admin (`enableAdminMode`/`disableAdminMode`). `ADMIN_PASSWORD`
+   sigue valiendo como respaldo mientras no haya PIN. Login limitado a 10
+   intentos / 15 min por IP (`lib/rate-limit.ts`), con reset al acertar.
+   "Salir" de `/gestion` borra las DOS cookies (desautoriza el móvil).
 6. **Chat: borrar/reaccionar reescribe la lista entera** (LRANGE → filtrar →
    DEL → RPUSH). No es atómico y hay carrera si dos escriben a la vez. El
    récord del juego SÍ usa un script Lua atómico (`saveHighScore`) —
