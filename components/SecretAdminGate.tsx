@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { ShieldCheck } from 'lucide-react';
 import {
     Dialog,
@@ -31,6 +31,7 @@ interface SecretAdminGateProps {
  */
 export function SecretAdminGate({ children, isAdmin = false, trusted = false }: SecretAdminGateProps) {
     const router = useRouter();
+    const pathname = usePathname();
     const [open, setOpen] = useState(false);
     const [hasPin, setHasPin] = useState(true);
     const [toast, setToast] = useState('');
@@ -50,6 +51,12 @@ export function SecretAdminGate({ children, isAdmin = false, trusted = false }: 
         if (isAdmin) {
             await disableAdminMode();
             showToast('Modo normal');
+            // Apagar el modo admin estando en /gestion dejaría la pantalla de
+            // login pidiendo el PIN, que es justo lo contrario de lo que se
+            // acaba de pedir: hay que salir de la página de admin.
+            if (pathname.startsWith('/gestion')) {
+                router.push('/');
+            }
             router.refresh();
             return;
         }
