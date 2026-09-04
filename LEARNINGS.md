@@ -27,4 +27,10 @@
 * [2026-09-04] DEUDA CONSCIENTE — `setupPin` no pide nada: mientras `fiesta:admin_pin` no exista, quien descubra el gesto se queda de admin. La ventana va del despliegue a la primera configuración; ciérrala poniendo el PIN al momento.
 * [2026-09-04] Turbopack falla el build con `app/favicon.ico` si los PNG embebidos son RGB ("The PNG is not in RGBA format!") / `Image.convert('RGBA')` antes de guardar el .ico con Pillow.
 * [2026-09-04] Icono PWA maskable: Android lo recorta a círculo/squircle, así que el escudo va al 60% del lienzo con fondo blanco; el icono `any` puede ir al 86%.
+* [2026-09-04] La cuota total impresa en la camiseta (28,12) no cuadra con el producto de sus 7 líneas (26,04) / el boleto oficial lleva los totales escritos a mano y solo los de la peña se calculan: manda el papel, no la aritmética.
+* [2026-09-04] `toLocaleString`/`new Date()` en un componente que se pinta en servidor y cliente rompe la hidratación (Vercel va en UTC) / formateo de euros a mano y la fecha del boleto se guarda ya formateada al crearlo.
+* [2026-09-04] Leer `localStorage` al montar con `useEffect`+`setState` lo caza el lint de React 19 / `useSyncExternalStore` con snapshot de servidor `''` lo hace bien y sin warning.
+* [2026-09-04] Satori (`next/og`) no recorta texto ni respeta el alto disponible: el pie se montaba encima de las líneas / cortar los strings a mano y limitar a 5 líneas visibles en 1200x630.
+* [2026-09-04] Compartir la imagen con `navigator.share({files})`: si el `fetch` del PNG se hace dentro del onClick, el `await` rompe la activación por gesto y Safari lo rechaza / se precarga al montar y se guarda en un ref.
+* [2026-09-04] Para revisar el móvil sin instalar nada: el Chromium de Playwright (`~/.cache/ms-playwright/chromium-*/chrome-linux64/chrome --headless --window-size=390,2400 --screenshot`).
 

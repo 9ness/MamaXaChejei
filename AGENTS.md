@@ -102,6 +102,8 @@ app/
   admin/actions.ts    # setupPin/loginWithPin/enable|disableAdminMode/changePin/logout
   mapa/page.tsx       # mapa Leaflet (MapaClient)
   recuerdos/page.tsx  # mural de fotos
+  lupebet/page.tsx    # LupeBet: boleto oficial de la camiseta + los de la peña
+  api/og/lupebet/route.tsx    # imagen del boleto (la que se comparte)
   api/chat/route.ts   # GET/POST/DELETE/PATCH del chat (pin, unpin, react)
   api/fotos/upload/route.ts   # handleUpload de Vercel Blob (subida directa cliente)
   api/debug/reset-score/route.ts  # ⚠️ reset del récord por GET, SIN AUTH
@@ -114,6 +116,11 @@ components/
   Itinerario.tsx, Countdown.tsx, Header.tsx, BottomNav.tsx,
   AnnouncementForm.tsx, AnnouncementBanner.tsx, AdminControls.tsx,
   PenaColorPicker.tsx, LoginForm.tsx, FotosClient.tsx,
+  BoletoTicket.tsx      # réplica del boleto de la camiseta (blanco + azul marino)
+  BoletoForm.tsx        # crear tu boleto de broma (cuota total en vivo)
+  BoletoList.tsx        # boletos de la peña + borrado de admin
+  BoletoShare.tsx       # comparte la IMAGEN del boleto (Web Share con files)
+  LupeBetCard.tsx       # bloque de la portada que lleva a /lupebet
   SecretAdminGate.tsx   # 5 toques en el título de Header → interruptor admin
   AdminPinFlow.tsx      # flujo del PIN (marcar / crear+repetir), compartido
   PinPad.tsx            # teclado numérico controlado (login y cambio de PIN)
@@ -123,6 +130,7 @@ lib/
   redis.ts            # cliente Upstash único (con cliente dummy si faltan envs)
   itinerario.ts       # ⚠️ DATOS del cartel, hardcodeados. 2026 es PROVISIONAL
   pena-colors.ts      # presets de paleta → variables CSS
+  lupebet.ts          # ⚠️ DATOS del boleto de la camiseta + cálculo de cuotas
   admin-auth.ts       # ⭐ isAdmin(): cookie de sesión firmada con HMAC
   admin-pin.ts        # PIN de admin en Redis (scrypt + salt)
   admin-pin-config.ts # constantes del PIN compartidas con el cliente
@@ -148,6 +156,7 @@ public/               # sprites del juego (man*.png, ~2 MB cada uno)
 | `fiesta:fotos` | LIST | URLs del mural |
 | `fiesta:loc:<anonId>` | STRING + TTL | punto del mapa (15/30/60 min o directo) |
 | `fiesta:loc_ids` | SET | índice de puntos (se auto-limpia al leer caducados) |
+| `fiesta:boletos` | LIST | boletos de broma de la peña (JSON, LTRIM 0 199) |
 | `fiesta:admin_pin` | HASH | `{salt, hash}` del PIN de admin (scrypt) |
 | `fiesta:admin_secret` | STRING | secreto HMAC con el que se firma la cookie de sesión |
 
@@ -245,6 +254,14 @@ store Blob). PENDIENTE: confirmar si conviene crear un `.env.example`.
    `components/Countdown.tsx` tiene la fecha objetivo **hardcodeada**
    (`2026-09-12T00:00:00`, hora local del navegador). Si cambian las fechas,
    hay que tocar los dos sitios.
+16. **LupeBet:** el boleto oficial son DATOS en `lib/lupebet.ts`, no Redis —
+    es el de la camiseta y se copia tal cual, faltas incluidas ("Janador",
+    "veses"), que son el chiste. Su cuota total impresa (28,12) NO es el
+    producto de las 7 líneas (sale 26,04): por eso el oficial lleva
+    `cuotaTotal`/`ganancia` a mano y solo los de la peña se calculan. El azul
+    `LUPE_AZUL` va a fuego y no sale de `pena-colors.ts` a propósito: el boleto
+    debe verse igual que la camiseta aunque cambien la paleta.
+
 10. **Mapa:** coordenadas del recinto y de las orquestas hardcodeadas en
     `MapaClient.tsx` (Praza de Castelao, Rianxo — hubo commits corrigiendo
     Padrón→Rianxo, no lo revuelvas). El modo "en directo" reescribe el punto

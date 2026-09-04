@@ -1,7 +1,17 @@
 'use server';
 
 import { redis } from '@/lib/redis';
+import { headers } from 'next/headers';
 import { isAdmin } from '@/lib/admin-auth';
+import { clientIpFromHeaders, rateLimited } from '@/lib/rate-limit';
+import {
+    type Boleto,
+    MAX_CUOTA,
+    MAX_IMPORTE,
+    MAX_LINEAS,
+    MIN_CUOTA,
+    fechaBoleto,
+} from '@/lib/lupebet';
 import { revalidatePath, unstable_noStore as noStore } from 'next/cache';
 import { z } from 'zod';
 
@@ -586,5 +596,120 @@ export async function getLocations(): Promise<MapPoint[]> {
         return points;
     } catch {
         return [];
+    }
+}
+
+// --- LUPEBET: BOLETOS DE BROMA DE LA PEÑA ---
+// El boleto oficial es el de la camiseta y vive en lib/lupebet.ts (datos, no
+// Redis). Aquí solo se guardan los que se inventa la gente.
+
+const BOLETOS_KEY = `${NAMESPACE}:boletos`;
+const BOLETOS_MAX = 200;
+
+const LineaSchema = z.object({
+    apuesta: z.string().trim().min(3).max(90),
+    pronostico: z.string().trim().max(40).default(''),
+    cuota: z.coerce.number().min(MIN_CUOTA).max(MAX_CUOTA),
+});
+
+const NuevoBoletoSchema = z.object({
+    titulo: z.string().trim().max(40).default('APUESTA COMBINADA'),
+    nombre: z.string().trim().min(1).max(24),
+    importe: z.coerce.number().min(1).max(MAX_IMPORTE),
+    lineas: z.array(LineaSchema).min(1).max(MAX_LINEAS),
+});
+
+export type NuevoBoleto = z.input<typeof NuevoBoletoSchema>;
+
+/** ID corto legible, del estilo del de la camiseta (LB-DDMMAA-NNNNNN). */
+function nuevoIdBoleto(ts: number) {
+    const d = new Date(ts);
+    const p = (n: number) => String(n).padStart(2, '0');
+    const fecha = `${p(d.getUTCDate())}${p(d.getUTCMonth() + 1)}${p(d.getUTCFullYear() % 100)}`;
+    const n = String(Math.floor(Math.random() * 1_000_000)).padStart(6, '0');
+    return `LB-${fecha}-${n}`;
+}
+
+const CODIGO_ALFABETO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sin I/O/0/1
+
+function nuevoCodigo() {
+    return Array.from({ length: 7 }, () => CODIGO_ALFABETO[Math.floor(Math.random() * CODIGO_ALFABETO.length)]).join('');
+}
+
+export async function createBoleto(input: NuevoBoleto): Promise<{ id?: string; error?: string }> {
+    // Por IP y no por anonId: el identificador lo genera el cliente y se rota.
+    const ip = clientIpFromHeaders(await headers());
+    if (await rateLimited('boleto', ip, 30, 60 * 60)) {
+        return { error: 'Demasiados boletos seguidos. Próbao noutro anaco.' };
+    }
+
+    const parsed = NuevoBoletoSchema.safeParse(input);
+    if (!parsed.success) return { error: 'Revisa os datos do boleto.' };
+
+    try {
+        const ts = Date.now();
+        const boleto: Boleto = {
+            id: nuevoIdBoleto(ts),
+            codigo: nuevoCodigo(),
+            titulo: parsed.data.titulo || 'APUESTA COMBINADA',
+            nombre: parsed.data.nombre,
+            importe: parsed.data.importe,
+            // Redondeo a 2 decimales: si no, 1.1*1.3 mete cola de flotante.
+            lineas: parsed.data.lineas.map((l) => ({ ...l, cuota: Math.round(l.cuota * 100) / 100 })),
+            fecha: fechaBoleto(ts),
+            ts,
+        };
+
+        await redis.lpush(BOLETOS_KEY, JSON.stringify(boleto));
+        await redis.ltrim(BOLETOS_KEY, 0, BOLETOS_MAX - 1);
+        revalidatePath('/lupebet');
+        return { id: boleto.id };
+    } catch {
+        return { error: 'Non se puido gardar o boleto.' };
+    }
+}
+
+export async function getBoletos(): Promise<Boleto[]> {
+    noStore();
+    try {
+        const raw = await redis.lrange(BOLETOS_KEY, 0, BOLETOS_MAX - 1);
+        return raw
+            .map((s: string | object) => {
+                try {
+                    return typeof s === 'object' ? (s as Boleto) : (JSON.parse(s) as Boleto);
+                } catch {
+                    return null;
+                }
+            })
+            .filter((b): b is Boleto => Boolean(b?.id && Array.isArray(b?.lineas)));
+    } catch {
+        return [];
+    }
+}
+
+export async function getBoleto(id: string): Promise<Boleto | null> {
+    if (!id) return null;
+    const todos = await getBoletos();
+    return todos.find((b) => b.id === id) ?? null;
+}
+
+/** Borrar un boleto (moderación). Reescribe la lista entera, como hace el chat. */
+export async function deleteBoleto(id: string) {
+    if (!(await isAdminRequest())) return { error: 'No autorizado' };
+
+    try {
+        const todos = await getBoletos();
+        const quedan = todos.filter((b) => b.id !== id);
+        if (quedan.length === todos.length) return { success: true };
+
+        await redis.del(BOLETOS_KEY);
+        if (quedan.length > 0) {
+            // getBoletos devuelve del más nuevo al más viejo y lpush invierte.
+            await redis.rpush(BOLETOS_KEY, ...quedan.map((b) => JSON.stringify(b)));
+        }
+        revalidatePath('/lupebet');
+        return { success: true };
+    } catch {
+        return { error: 'Non se puido borrar o boleto.' };
     }
 }

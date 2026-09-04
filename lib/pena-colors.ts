@@ -2,7 +2,7 @@
 // estilo (nav, títulos, chat, botones primarios) se tiñe vía variables CSS.
 // Cada preset define los tonos en formato HSL "H S% L%" (compatible con shadcn).
 
-export type PenaColorKey = 'verde' | 'amarillo' | 'rojo' | 'azul' | 'morado' | 'rosa';
+export type PenaColorKey = 'verde' | 'amarillo' | 'rojo' | 'azul' | 'marino' | 'morado' | 'rosa';
 
 export interface PenaPreset {
     key: PenaColorKey;
@@ -67,6 +67,19 @@ export const PENA_PRESETS: Record<PenaColorKey, PenaPreset> = {
             ring: '217 85% 50%',
             penaFrom: '213 92% 58%',
             penaTo: '230 78% 46%',
+        },
+    },
+    // El azul marino de las mangas de la camiseta de J'26.
+    marino: {
+        key: 'marino',
+        label: 'Marino J\'26',
+        swatch: 'hsl(232 62% 30%)',
+        vars: {
+            primary: '232 62% 30%',
+            primaryForeground: '0 0% 100%',
+            ring: '232 62% 30%',
+            penaFrom: '232 58% 38%',
+            penaTo: '228 70% 20%',
         },
     },
     morado: {
