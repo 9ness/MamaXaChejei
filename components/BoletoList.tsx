@@ -3,11 +3,17 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { Trash2 } from 'lucide-react';
-import { type Boleto, cuotaTotal, eur, ganancia } from '@/lib/lupebet';
+import { type Boleto, type EstadoBoleto, cuotaTotal, eur, ganancia } from '@/lib/lupebet';
 import { deleteBoleto } from '@/app/actions';
 
 /** Lista compacta: el ticket entero solo se pinta al abrir uno, si no la página
  *  se hace eterna con 50 boletos. */
+const BADGE: Record<EstadoBoleto, { texto: string; clase: string } | null> = {
+    aberto: null,
+    ganado: { texto: '🎉 Gañado', clase: 'bg-green-100 text-green-800 border-green-200' },
+    perdido: { texto: '💀 Perdido', clase: 'bg-red-100 text-red-800 border-red-200' },
+};
+
 export function BoletoList({ boletos, isAdmin = false }: { boletos: Boleto[]; isAdmin?: boolean }) {
     const [borrados, setBorrados] = useState<string[]>([]);
     const visibles = boletos.filter((b) => !borrados.includes(b.id));
@@ -43,6 +49,21 @@ export function BoletoList({ boletos, isAdmin = false }: { boletos: Boleto[]; is
                         <p className="text-xs text-muted-foreground uppercase tracking-wide truncate mt-0.5">
                             {b.titulo}
                         </p>
+
+                        {(BADGE[b.estado ?? 'aberto'] || (b.apostado ?? 0) > 0) && (
+                            <div className="flex items-center gap-2 mt-2">
+                                {BADGE[b.estado ?? 'aberto'] && (
+                                    <span className={`text-[10px] font-bold border rounded-full px-2 py-0.5 ${BADGE[b.estado ?? 'aberto']!.clase}`}>
+                                        {BADGE[b.estado ?? 'aberto']!.texto}
+                                    </span>
+                                )}
+                                {(b.apostado ?? 0) > 0 && (
+                                    <span className="text-[11px] text-muted-foreground tabular-nums">
+                                        🪙 {b.apostado} moedas
+                                    </span>
+                                )}
+                            </div>
+                        )}
                         <div className="mt-3 flex items-end justify-between gap-3">
                             <span className="text-[11px] text-muted-foreground">
                                 Cuota {eur(cuotaTotal(b.lineas))}

@@ -5,7 +5,9 @@ import { BoletoTicket } from '@/components/BoletoTicket';
 import { BoletoForm } from '@/components/BoletoForm';
 import { BoletoList } from '@/components/BoletoList';
 import { BoletoShare } from '@/components/BoletoShare';
-import { getBoleto, getBoletos } from '@/app/actions';
+import { ApostarPanel } from '@/components/ApostarPanel';
+import { ResolverBoleto } from '@/components/ResolverBoleto';
+import { getApostas, getBoleto, getBoletos, getRankingMoedas } from '@/app/actions';
 import { isAdmin } from '@/lib/admin-auth';
 import { BOLETO_OFICIAL } from '@/lib/lupebet';
 
@@ -50,11 +52,13 @@ export default async function LupeBetPage({ searchParams }: { searchParams: Sear
     const sp = await searchParams;
     const id = typeof sp.b === 'string' ? sp.b : undefined;
 
-    const [destacado, boletos, admin] = await Promise.all([
+    const [destacado, boletos, admin, ranking] = await Promise.all([
         id ? getBoleto(id) : Promise.resolve(null),
         getBoletos(),
         isAdmin(),
+        getRankingMoedas(),
     ]);
+    const apostas = destacado ? await getApostas(destacado.id) : null;
 
     return (
         <main className="min-h-screen bg-gray-50/50 dark:bg-zinc-950">
@@ -86,6 +90,18 @@ export default async function LupeBetPage({ searchParams }: { searchParams: Sear
                         />
                         <div className="flex justify-center mt-4">
                             <BoletoShare id={destacado.id} nombre={destacado.nombre} />
+                        </div>
+
+                        <div className="max-w-md mx-auto">
+                            <ApostarPanel
+                                boletoId={destacado.id}
+                                estado={destacado.estado ?? 'aberto'}
+                                lineas={destacado.lineas}
+                                apostas={apostas ?? { total: 0, apostantes: [] }}
+                            />
+                            {admin && destacado.estado === 'aberto' && (
+                                <ResolverBoleto boletoId={destacado.id} />
+                            )}
                         </div>
                     </section>
                 )}
@@ -120,12 +136,34 @@ export default async function LupeBetPage({ searchParams }: { searchParams: Sear
                     </div>
                 </details>
 
-                <section>
+                <section className="mb-12">
                     <h2 className="text-center text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">
                         Os boletos da peña
                     </h2>
                     <BoletoList boletos={boletos} isAdmin={admin} />
                 </section>
+
+                {ranking.length > 0 && (
+                    <section>
+                        <h2 className="text-center text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">
+                            🪙 Clasificación de moedas
+                        </h2>
+                        <ol className="rounded-lg border bg-card divide-y">
+                            {ranking.map((p, i) => (
+                                <li key={i} className="flex items-center gap-3 px-4 py-2.5">
+                                    <span className="w-6 text-sm font-bold text-muted-foreground tabular-nums">
+                                        {i + 1}
+                                    </span>
+                                    <span className="flex-1 truncate font-medium">{p.nombre}</span>
+                                    <span className="font-bold tabular-nums">{p.saldo}</span>
+                                </li>
+                            ))}
+                        </ol>
+                        <p className="text-center text-[11px] text-muted-foreground mt-2">
+                            Cada móbil empeza con 1000 moedas. Son de broma, non serven para nada. 🎈
+                        </p>
+                    </section>
+                )}
             </div>
         </main>
     );

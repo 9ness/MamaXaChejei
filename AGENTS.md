@@ -120,6 +120,8 @@ components/
   BoletoForm.tsx        # crear tu boleto de broma (cuota total en vivo)
   BoletoList.tsx        # boletos de la peña + borrado de admin
   BoletoShare.tsx       # comparte la IMAGEN del boleto (Web Share con files)
+  ApostarPanel.tsx      # apostar moedas (identidad = anon_id del navegador)
+  ResolverBoleto.tsx    # admin: cerrar un boleto como gañado/perdido
   LupeBetCard.tsx       # bloque de la portada que lleva a /lupebet
   SecretAdminGate.tsx   # 5 toques en el título de Header → interruptor admin
   AdminPinFlow.tsx      # flujo del PIN (marcar / crear+repetir), compartido
@@ -131,6 +133,7 @@ lib/
   itinerario.ts       # ⚠️ DATOS del cartel, hardcodeados. 2026 es PROVISIONAL
   pena-colors.ts      # presets de paleta → variables CSS
   lupebet.ts          # ⚠️ DATOS del boleto de la camiseta + cálculo de cuotas
+  anon-id.ts          # identidad anónima por dispositivo (misma que el mapa)
   admin-auth.ts       # ⭐ isAdmin(): cookie de sesión firmada con HMAC
   admin-pin.ts        # PIN de admin en Redis (scrypt + salt)
   admin-pin-config.ts # constantes del PIN compartidas con el cliente
@@ -157,6 +160,11 @@ public/               # sprites del juego (man*.png, ~2 MB cada uno)
 | `fiesta:loc:<anonId>` | STRING + TTL | punto del mapa (15/30/60 min o directo) |
 | `fiesta:loc_ids` | SET | índice de puntos (se auto-limpia al leer caducados) |
 | `fiesta:boletos` | LIST | boletos de broma de la peña (JSON, LTRIM 0 199) |
+| `fiesta:boletos_estado` | HASH | boletoId → `ganado`/`perdido` (aparte, para no reescribir la lista) |
+| `fiesta:apostas:<boletoId>` | HASH | anonId → apuesta `{nombre, moedas, ts}` |
+| `fiesta:apostas_total` | HASH | boletoId → moedas apostadas (contador para la lista) |
+| `fiesta:moedas` | HASH | anonId → saldo (arranca en 1000) |
+| `fiesta:moedas_nome` | HASH | anonId → nombre, solo para la clasificación |
 | `fiesta:admin_pin` | HASH | `{salt, hash}` del PIN de admin (scrypt) |
 | `fiesta:admin_secret` | STRING | secreto HMAC con el que se firma la cookie de sesión |
 
@@ -261,6 +269,16 @@ store Blob). PENDIENTE: confirmar si conviene crear un `.env.example`.
     `cuotaTotal`/`ganancia` a mano y solo los de la peña se calculan. El azul
     `LUPE_AZUL` va a fuego y no sale de `pena-colors.ts` a propósito: el boleto
     debe verse igual que la camiseta aunque cambien la paleta.
+
+17. **Moedas de LupeBet:** la identidad es el `anon_id` de `localStorage` (el
+    mismo del mapa), NO hay cuentas — quien borre los datos del navegador
+    empieza de cero con 1000 moedas. Asumido a propósito. Al apostar, el orden
+    es: `hsetnx` en `fiesta:apostas:<id>` (reserva atómica, una apuesta por
+    persona) y solo después `hincrby` negativo del saldo; si queda en negativo
+    se deshacen las dos cosas. Cerrar un boleto también va con `hsetnx` sobre
+    `fiesta:boletos_estado`: es lo único que impide pagar dos veces si el admin
+    pulsa dos veces. Los pagos están topados por `MAX_MULTIPLICADOR` (500) —
+    sin ese tope, 8 líneas a cuota 50 pagarían miles de millones.
 
 10. **Mapa:** coordenadas del recinto y de las orquestas hardcodeadas en
     `MapaClient.tsx` (Praza de Castelao, Rianxo — hubo commits corrigiendo

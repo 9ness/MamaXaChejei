@@ -9,13 +9,14 @@ import { Label } from '@/components/ui/label';
 import { createBoleto } from '@/app/actions';
 import {
     type BoletoLinea,
-    MAX_CUOTA,
     MAX_IMPORTE,
     MAX_LINEAS,
-    MIN_CUOTA,
+    cuotaContraria,
+    cuotaDeProbabilidad,
     cuotaTotal,
     eur,
     ganancia,
+    probabilidadDeCuota,
 } from '@/lib/lupebet';
 
 type LineaDraft = { apuesta: string; pronostico: string; cuota: string };
@@ -39,6 +40,51 @@ function useNombreGuardado() {
         () => () => {},                                     // no cambia solo
         () => localStorage.getItem('chat_username') || '',  // cliente
         () => '',                                           // servidor
+    );
+}
+
+function CuotaPicker({
+    cuota,
+    onCuota,
+    linea,
+}: {
+    cuota: number;
+    onCuota: (c: number) => void;
+    linea: number;
+}) {
+    const pct = probabilidadDeCuota(cuota);
+
+    return (
+        <div className="rounded-md bg-muted/50 px-3 py-2.5">
+            <div className="flex items-end justify-between gap-3">
+                <label htmlFor={`prob-${linea}`} className="text-xs font-medium text-muted-foreground">
+                    Probabilidade de que pase
+                    <span className="block text-base font-bold text-foreground tabular-nums">{pct}%</span>
+                </label>
+                <div className="text-right">
+                    <span className="block text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                        Cuota
+                    </span>
+                    <span className="block text-2xl font-extrabold tabular-nums leading-none">
+                        {eur(cuota)}
+                    </span>
+                </div>
+            </div>
+
+            <input
+                id={`prob-${linea}`}
+                type="range"
+                min={2}
+                max={99}
+                value={pct}
+                onChange={(e) => onCuota(cuotaDeProbabilidad(Number(e.target.value)))}
+                className="w-full mt-2 accent-primary"
+            />
+
+            <p className="text-[11px] text-muted-foreground mt-1">
+                O contrario pagaría <span className="font-bold">{eur(cuotaContraria(cuota))}</span>
+            </p>
+        </div>
     );
 }
 
@@ -143,25 +189,21 @@ export function BoletoForm() {
                             placeholder="Nº de veses que sona a Rianxeira"
                             onChange={(e) => patch(i, 'apuesta', e.target.value)}
                         />
-                        <div className="grid grid-cols-3 gap-2">
-                            <Input
-                                className="col-span-2"
-                                value={l.pronostico}
-                                maxLength={40}
-                                placeholder="Máis de 25'5"
-                                onChange={(e) => patch(i, 'pronostico', e.target.value)}
-                            />
-                            <Input
-                                type="number"
-                                inputMode="decimal"
-                                step="0.01"
-                                min={MIN_CUOTA}
-                                max={MAX_CUOTA}
-                                value={l.cuota}
-                                aria-label={`Cuota da liña ${i + 1}`}
-                                onChange={(e) => patch(i, 'cuota', e.target.value)}
-                            />
-                        </div>
+                        <Input
+                            value={l.pronostico}
+                            maxLength={40}
+                            placeholder="Máis de 25'5"
+                            onChange={(e) => patch(i, 'pronostico', e.target.value)}
+                        />
+
+                        {/* Nadie piensa en cuotas: se elige la probabilidad y la
+                            cuota sale sola. La cuota sigue siendo la fuente de
+                            verdad, el deslizador es solo la forma de tocarla. */}
+                        <CuotaPicker
+                            cuota={Number(l.cuota.replace(',', '.')) || 1.5}
+                            onCuota={(c) => patch(i, 'cuota', String(c))}
+                            linea={i + 1}
+                        />
                     </div>
                 ))}
 

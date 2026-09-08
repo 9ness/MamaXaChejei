@@ -33,4 +33,10 @@
 * [2026-09-04] Satori (`next/og`) no recorta texto ni respeta el alto disponible: el pie se montaba encima de las líneas / cortar los strings a mano y limitar a 5 líneas visibles en 1200x630.
 * [2026-09-04] Compartir la imagen con `navigator.share({files})`: si el `fetch` del PNG se hace dentro del onClick, el `await` rompe la activación por gesto y Safari lo rechaza / se precarga al montar y se guarda en un ref.
 * [2026-09-04] Para revisar el móvil sin instalar nada: el Chromium de Playwright (`~/.cache/ms-playwright/chromium-*/chrome-linux64/chrome --headless --window-size=390,2400 --screenshot`).
+* [2026-09-08] Apuestas sin cuentas de usuario: no hacía falta login, la app ya tenía identidad anónima (`anon_id` en localStorage, del mapa) / se extrajo a `lib/anon-id.ts` para reutilizar la MISMA persona en toda la app.
+* [2026-09-08] Descontar moedas con `hincrby` negativo puede dejar el saldo bajo cero si dos pestañas apuestan a la vez / se reserva antes el sitio con `hsetnx` y, si el saldo queda negativo, se deshacen las dos operaciones.
+* [2026-09-08] Pagar apuestas es idempotente por el `hsetnx` del estado, no por un flag leído antes: si el admin pulsa "Gañado" dos veces, la segunda no entra.
+* [2026-09-08] Sin tope al multiplicador, un boleto de 8 líneas a cuota 50 paga 39.000 millones de moedas / `MAX_MULTIPLICADOR = 500` y `MAX_CUOTA` bajada de 999 a 50.
+* [2026-09-08] Una cuota ES una probabilidad (`p = 1/cuota`) y la contraria sale de `1/(1+margen-p)` / la gente no piensa en cuotas: el formulario pide el % con un deslizador y enseña la cuota, no al revés.
+* [2026-09-08] Las carpetas `app/__algo` no generan ruta: Next las trata como privadas. Para una página de pruebas, nombre sin guiones bajos delante.
 

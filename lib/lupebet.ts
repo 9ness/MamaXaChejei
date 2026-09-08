@@ -23,6 +23,29 @@ export interface Boleto {
     fecha: string;
     /** Epoch ms, solo para ordenar. */
     ts: number;
+    /** Lo pone el admin al cerrarlo. Sin resolver = 'aberto'. */
+    estado?: EstadoBoleto;
+    /** Moedas apostadas en total. Contador aparte, para no leer las apuestas
+     *  de los 200 boletos cada vez que se pinta la lista. */
+    apostado?: number;
+}
+
+export type EstadoBoleto = 'aberto' | 'ganado' | 'perdido';
+
+/** Moedas con las que arranca cada móvil la primera vez. */
+export const SALDO_INICIAL = 1000;
+/** Tope por apuesta, para que nadie funda el saldo de golpe sin querer. */
+export const MAX_APOSTA = 500;
+
+export interface Aposta {
+    nombre: string;
+    moedas: number;
+    ts: number;
+}
+
+export interface ApostasBoleto {
+    total: number;
+    apostantes: Aposta[];
 }
 
 /**
@@ -36,7 +59,39 @@ export const LUPE_AZUL_CLARO = '#2E3FA8';
 export const MAX_LINEAS = 8;
 export const MAX_IMPORTE = 1000;
 export const MIN_CUOTA = 1.01;
-export const MAX_CUOTA = 999;
+export const MAX_CUOTA = 50;
+
+/**
+ * Margen de la casa, como en las de verdad: las probabilidades de un mercado
+ * suman algo más de 1 y esa diferencia es lo que se queda la banca.
+ */
+export const MARGEN = 0.06;
+
+/** Cuánto paga como máximo un boleto, pase lo que pase. Sin este tope, ocho
+ *  líneas a cuota 50 pagarían 39.000 millones de moedas y revientan el juego. */
+export const MAX_MULTIPLICADOR = 500;
+
+/** Una cuota ES una probabilidad disfrazada: 1,30 → 77% de que pase. */
+export function probabilidadDeCuota(cuota: number): number {
+    if (!(cuota > 1)) return 99;
+    return Math.min(99, Math.max(1, Math.round(100 / cuota)));
+}
+
+/** El camino de vuelta: 77% → cuota 1,30. */
+export function cuotaDeProbabilidad(pct: number): number {
+    const p = Math.min(99, Math.max(2, Math.round(pct)));
+    return Math.min(MAX_CUOTA, Math.max(MIN_CUOTA, Math.round((100 / p) * 100) / 100));
+}
+
+/**
+ * La cuota que tendría lo contrario, con el margen de la casa incluido.
+ * Cuota 1,30 (77%) → lo contrario tiene un 23% → paga 3,44.
+ */
+export function cuotaContraria(cuota: number): number {
+    const resto = 1 + MARGEN - 1 / cuota;
+    if (resto <= 1 / MAX_CUOTA) return MAX_CUOTA;
+    return Math.min(MAX_CUOTA, Math.max(MIN_CUOTA, Math.round((1 / resto) * 100) / 100));
+}
 
 /** Producto de las cuotas, como en una combinada de verdad. */
 export function cuotaTotal(lineas: BoletoLinea[]): number {
@@ -45,6 +100,11 @@ export function cuotaTotal(lineas: BoletoLinea[]): number {
 
 export function ganancia(importe: number, lineas: BoletoLinea[]): number {
     return importe * cuotaTotal(lineas);
+}
+
+/** Lo que se paga de verdad al resolver, ya con el tope aplicado. */
+export function multiplicadorPago(lineas: BoletoLinea[]): number {
+    return Math.min(MAX_MULTIPLICADOR, cuotaTotal(lineas));
 }
 
 /**

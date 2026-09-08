@@ -5,12 +5,18 @@ import { headers } from 'next/headers';
 import { isAdmin } from '@/lib/admin-auth';
 import { clientIpFromHeaders, rateLimited } from '@/lib/rate-limit';
 import {
+    type Aposta,
+    type ApostasBoleto,
     type Boleto,
+    type EstadoBoleto,
+    MAX_APOSTA,
     MAX_CUOTA,
     MAX_IMPORTE,
     MAX_LINEAS,
     MIN_CUOTA,
+    SALDO_INICIAL,
     fechaBoleto,
+    multiplicadorPago,
 } from '@/lib/lupebet';
 import { revalidatePath, unstable_noStore as noStore } from 'next/cache';
 import { z } from 'zod';
@@ -672,7 +678,13 @@ export async function createBoleto(input: NuevoBoleto): Promise<{ id?: string; e
 export async function getBoletos(): Promise<Boleto[]> {
     noStore();
     try {
-        const raw = await redis.lrange(BOLETOS_KEY, 0, BOLETOS_MAX - 1);
+        // El estado va en su propia HASH: marcarlo no tiene que reescribir la
+        // lista entera de boletos.
+        const [raw, estados, totales] = await Promise.all([
+            redis.lrange(BOLETOS_KEY, 0, BOLETOS_MAX - 1),
+            redis.hgetall<Record<string, string>>(`${NAMESPACE}:boletos_estado`),
+            redis.hgetall<Record<string, string | number>>(`${NAMESPACE}:apostas_total`),
+        ]);
         return raw
             .map((s: string | object) => {
                 try {
@@ -681,7 +693,12 @@ export async function getBoletos(): Promise<Boleto[]> {
                     return null;
                 }
             })
-            .filter((b): b is Boleto => Boolean(b?.id && Array.isArray(b?.lineas)));
+            .filter((b): b is Boleto => Boolean(b?.id && Array.isArray(b?.lineas)))
+            .map((b) => ({
+                ...b,
+                estado: (estados?.[b.id] as EstadoBoleto) ?? 'aberto',
+                apostado: Number(totales?.[b.id]) || 0,
+            }));
     } catch {
         return [];
     }
@@ -711,5 +728,206 @@ export async function deleteBoleto(id: string) {
         return { success: true };
     } catch {
         return { error: 'Non se puido borrar o boleto.' };
+    }
+}
+
+// --- LUPEBET: MOEDAS, APOSTAS E RESOLUCIÓN ---
+// Sin cuentas de usuario: la identidad es el `anon_id` del navegador, el mismo
+// que usa el mapa. No es auth — quien borre los datos vuelve a empezar. Para
+// una peña de bromas es el trato aceptado.
+
+const MOEDAS_KEY = `${NAMESPACE}:moedas`;          // HASH anonId -> saldo
+const MOEDAS_NOME_KEY = `${NAMESPACE}:moedas_nome`; // HASH anonId -> nombre
+const APOSTAS_PREFIX = `${NAMESPACE}:apostas:`;     // HASH anonId -> Aposta (JSON)
+const ESTADOS_KEY = `${NAMESPACE}:boletos_estado`;  // HASH boletoId -> estado
+const APOSTAS_TOTAL_KEY = `${NAMESPACE}:apostas_total`; // HASH boletoId -> moedas
+
+function limpiaAnonId(id: unknown): string | null {
+    if (typeof id !== 'string') return null;
+    const v = id.trim().slice(0, 64);
+    return v.length >= 8 ? v : null;
+}
+
+/** Saldo del dispositivo. Crea la cartera con SALDO_INICIAL la primera vez. */
+export async function getSaldo(anonId: string): Promise<number> {
+    noStore();
+    const id = limpiaAnonId(anonId);
+    if (!id) return 0;
+    try {
+        // hsetnx: si dos pestañas entran a la vez, solo una crea la cartera.
+        await redis.hsetnx(MOEDAS_KEY, id, SALDO_INICIAL);
+        const raw = await redis.hget<number | string>(MOEDAS_KEY, id);
+        return Number(raw) || 0;
+    } catch {
+        return 0;
+    }
+}
+
+export async function getApostas(boletoId: string): Promise<ApostasBoleto> {
+    noStore();
+    if (!boletoId) return { total: 0, apostantes: [] };
+    try {
+        const raw = await redis.hgetall<Record<string, string | Aposta>>(`${APOSTAS_PREFIX}${boletoId}`);
+        if (!raw) return { total: 0, apostantes: [] };
+
+        const apostantes = Object.values(raw)
+            .map((v) => {
+                try {
+                    return (typeof v === 'object' ? v : JSON.parse(v)) as Aposta;
+                } catch {
+                    return null;
+                }
+            })
+            .filter((a): a is Aposta => Boolean(a && Number.isFinite(a.moedas)))
+            .sort((a, b) => b.moedas - a.moedas);
+
+        return { total: apostantes.reduce((n, a) => n + a.moedas, 0), apostantes };
+    } catch {
+        return { total: 0, apostantes: [] };
+    }
+}
+
+/**
+ * Apostar moedas a un boleto. Una apuesta por persona y boleto.
+ * El orden importa: primero se reserva el sitio con hsetnx (que es atómico) y
+ * solo después se descuenta. Si el saldo no llega, se deshacen las dos cosas.
+ */
+export async function apostar(
+    boletoId: string,
+    anonId: string,
+    nombre: string,
+    moedas: number,
+): Promise<{ saldo?: number; error?: string }> {
+    const id = limpiaAnonId(anonId);
+    if (!id) return { error: 'Non se puido identificar o dispositivo.' };
+
+    const cantidad = Math.floor(Number(moedas));
+    if (!Number.isFinite(cantidad) || cantidad < 1 || cantidad > MAX_APOSTA) {
+        return { error: `A aposta ten que ir entre 1 e ${MAX_APOSTA} moedas.` };
+    }
+
+    const ip = clientIpFromHeaders(await headers());
+    if (await rateLimited('aposta', ip, 60, 60 * 60)) {
+        return { error: 'Demasiadas apostas seguidas. Próbao noutro anaco.' };
+    }
+
+    try {
+        const boleto = await getBoleto(boletoId);
+        if (!boleto) return { error: 'Ese boleto xa non existe.' };
+        if (boleto.estado && boleto.estado !== 'aberto') {
+            return { error: 'Ese boleto xa está pechado.' };
+        }
+
+        const key = `${APOSTAS_PREFIX}${boletoId}`;
+        const aposta: Aposta = {
+            nombre: (nombre || 'Anónimo').trim().slice(0, 24) || 'Anónimo',
+            moedas: cantidad,
+            ts: Date.now(),
+        };
+
+        const reservado = await redis.hsetnx(key, id, JSON.stringify(aposta));
+        if (!reservado) return { error: 'Xa apostaches neste boleto.' };
+
+        await redis.hsetnx(MOEDAS_KEY, id, SALDO_INICIAL);
+        const saldo = await redis.hincrby(MOEDAS_KEY, id, -cantidad);
+
+        if (saldo < 0) {
+            await redis.hincrby(MOEDAS_KEY, id, cantidad);
+            await redis.hdel(key, id);
+            return { error: 'Non tes moedas dabondo.' };
+        }
+
+        await redis.hset(MOEDAS_NOME_KEY, { [id]: aposta.nombre });
+        await redis.hincrby(APOSTAS_TOTAL_KEY, boletoId, cantidad);
+        revalidatePath('/lupebet');
+        return { saldo };
+    } catch {
+        return { error: 'Non se puido rexistrar a aposta.' };
+    }
+}
+
+/**
+ * El admin cierra un boleto. Si sale ganado, a cada apostante se le devuelve su
+ * apuesta multiplicada por la cuota total (con el tope de MAX_MULTIPLICADOR).
+ * El hsetnx del estado es lo que impide pagar dos veces si se pulsa dos veces.
+ */
+export async function resolverBoleto(
+    boletoId: string,
+    resultado: 'ganado' | 'perdido',
+): Promise<{ success?: true; error?: string }> {
+    if (!(await isAdminRequest())) return { error: 'No autorizado' };
+    if (resultado !== 'ganado' && resultado !== 'perdido') return { error: 'Resultado non válido' };
+
+    try {
+        const boleto = await getBoleto(boletoId);
+        if (!boleto) return { error: 'Ese boleto xa non existe.' };
+
+        const primero = await redis.hsetnx(ESTADOS_KEY, boletoId, resultado);
+        if (!primero) return { error: 'Ese boleto xa estaba resolto.' };
+
+        if (resultado === 'ganado') {
+            const key = `${APOSTAS_PREFIX}${boletoId}`;
+            const raw = await redis.hgetall<Record<string, string | Aposta>>(key);
+            const mult = multiplicadorPago(boleto.lineas);
+
+            for (const [anonId, v] of Object.entries(raw ?? {})) {
+                try {
+                    const a = (typeof v === 'object' ? v : JSON.parse(v)) as Aposta;
+                    const pago = Math.round(a.moedas * mult);
+                    if (pago > 0) await redis.hincrby(MOEDAS_KEY, anonId, pago);
+                } catch {
+                    // una apuesta corrupta no debe cortar el pago de las demás
+                }
+            }
+        }
+
+        revalidatePath('/lupebet');
+        return { success: true };
+    } catch {
+        return { error: 'Non se puido pechar o boleto.' };
+    }
+}
+
+export interface PostoRanking {
+    nombre: string;
+    saldo: number;
+}
+
+/** Clasificación por moedas. Solo sale quien apostó alguna vez (tiene nombre). */
+export async function getRankingMoedas(limit = 20): Promise<PostoRanking[]> {
+    noStore();
+    try {
+        const [saldos, nombres] = await Promise.all([
+            redis.hgetall<Record<string, string | number>>(MOEDAS_KEY),
+            redis.hgetall<Record<string, string>>(MOEDAS_NOME_KEY),
+        ]);
+        if (!saldos || !nombres) return [];
+
+        return Object.entries(nombres)
+            .map(([id, nombre]) => ({ nombre: String(nombre), saldo: Number(saldos[id]) || 0 }))
+            .sort((a, b) => b.saldo - a.saldo)
+            .slice(0, limit);
+    } catch {
+        return [];
+    }
+}
+
+/** Todo lo que el navegador necesita saber de un boleto en una sola llamada. */
+export async function getMeuEstado(
+    boletoId: string,
+    anonId: string,
+): Promise<{ saldo: number; aposta: Aposta | null }> {
+    noStore();
+    const id = limpiaAnonId(anonId);
+    if (!id) return { saldo: 0, aposta: null };
+
+    const saldo = await getSaldo(id);
+    try {
+        const raw = await redis.hget<string | Aposta>(`${APOSTAS_PREFIX}${boletoId}`, id);
+        if (!raw) return { saldo, aposta: null };
+        const aposta = (typeof raw === 'object' ? raw : JSON.parse(raw)) as Aposta;
+        return { saldo, aposta };
+    } catch {
+        return { saldo, aposta: null };
     }
 }
