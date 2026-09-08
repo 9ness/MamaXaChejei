@@ -63,7 +63,7 @@ export default async function LupeBetPage({ searchParams }: { searchParams: Sear
 
     pestanas.push({
         id: 'oficial',
-        label: '👕 O da camiseta',
+        label: '👕 Boleto oficial',
         contido: (
             <BoletoTicket
                 titulo={BOLETO_OFICIAL.titulo}
