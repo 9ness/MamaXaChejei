@@ -15,7 +15,9 @@ const BASE_ITEMS: NavItem[] = [
     { href: '/', label: 'Inicio', icon: Home },
     { href: '/lista', label: 'Lista', icon: List },
     { href: '/mapa', label: 'Mapa', icon: MapPin },
-    { href: '/recuerdos', label: 'Recuerdos', icon: Images },
+    // "Fotos" y no "Recuerdos": con 6 pestañas la palabra larga se comía su hueco
+    // y dejaba sin aire a la de al lado. La sección se sigue llamando Recuerdos.
+    { href: '/recuerdos', label: 'Fotos', icon: Images },
     { href: '/lupebet', label: 'LupeBet', icon: Ticket },
 ];
 
