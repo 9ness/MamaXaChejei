@@ -59,8 +59,11 @@ export function BottomNav({ isAdmin = false }: { isAdmin?: boolean }) {
 
             {/* Móvil: barra inferior fija */}
             <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t bg-background/90 backdrop-blur-md pb-[env(safe-area-inset-bottom)]">
-                {/* 4 pestañas de base, 5 con LupeBet y 6 en modo admin: a 6 quedan
-                    ~65px por hueco en un móvil estrecho, apretado pero legible. */}
+                {/* Las columnas son exactamente iguales (1fr cada una), así que los
+                    iconos van siempre a la misma distancia. Lo que se apelotona a 6
+                    huecos son las ETIQUETAS: "Recuerdos" casi llena sus ~65px y deja
+                    sin aire a la de al lado, mientras "Mapa" sobra por todos lados.
+                    Por eso a 6 se baja el cuerpo de letra, para devolver el hueco. */}
                 <div
                     className={cn(
                         "grid",
@@ -74,7 +77,8 @@ export function BottomNav({ isAdmin = false }: { isAdmin?: boolean }) {
                                 key={href}
                                 href={href}
                                 className={cn(
-                                    "flex flex-col items-center justify-center gap-0.5 py-2 px-0.5 text-[10px] font-medium transition-colors",
+                                    "flex flex-col items-center justify-center gap-0.5 py-2 px-0.5 font-medium transition-colors",
+                                    items.length >= 6 ? "text-[9px] tracking-tight" : "text-[10px]",
                                     active ? "text-primary" : "text-muted-foreground"
                                 )}
                             >
