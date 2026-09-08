@@ -1,11 +1,14 @@
 import { ImageResponse } from 'next/og';
-import { getBoleto } from '@/app/actions';
+import { getApostas, getBoleto } from '@/app/actions';
 import { BOLETO_OFICIAL, LUPE_AZUL, cuotaTotal, eur, ganancia, mercadoBoleto } from '@/lib/lupebet';
 
 // La imagen que se comparte por WhatsApp/redes: el boleto en blanco y azul
 // marino. /api/og/lupebet?b=<id>  (sin b → el boleto oficial de la camiseta)
 
 export const runtime = 'nodejs';
+// Las cuotas van EN VIVO, así que la imagen no se puede cachear: cada vez que
+// alguien comparte tiene que salir con las de ese momento (como en Bet365).
+export const dynamic = 'force-dynamic';
 
 const W = 1200;
 const H = 630;
@@ -33,13 +36,17 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('b') ?? '';
     const boleto = id ? await getBoleto(id) : null;
+    const apostas = boleto ? await getApostas(boleto.id) : null;
 
     const titulo = boleto ? boleto.titulo : BOLETO_OFICIAL.titulo;
     const quien = boleto ? boleto.nombre : 'O da camiseta';
     const lineas = boleto ? boleto.lineas : [...BOLETO_OFICIAL.lineas];
     const total = boleto ? cuotaTotal(boleto.lineas) : BOLETO_OFICIAL.cuotaTotal;
     const premio = boleto ? ganancia(boleto.importe, boleto.lineas) : BOLETO_OFICIAL.ganancia;
-    const mercado = mercadoBoleto(lineas);
+    // La foto del mercado en el momento de compartir: la cuota que sale en la
+    // imagen es la que hay ahora, con las moedas que lleva cada lado.
+    const mercado = mercadoBoleto(lineas, apostas?.totalSi ?? 0, apostas?.totalNon ?? 0);
+    const enXogo = apostas?.total ?? 0;
 
     const visibles = lineas.slice(0, MAX_LINEAS_VISIBLES);
     const ocultas = lineas.length - visibles.length;
@@ -180,7 +187,9 @@ export async function GET(req: Request) {
                         <div style={{ display: 'flex', fontSize: 22, marginLeft: 8, opacity: 0.7 }}>
                             {ocultas > 0
                                 ? `+${ocultas} liña${ocultas === 1 ? '' : 's'} máis`
-                                : 'XOJA CON RESPONSABILIDADE'}
+                                : enXogo > 0
+                                    ? `${enXogo} MOEDAS EN XOGO`
+                                    : 'XOJA CON RESPONSABILIDADE'}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center' }}>
                             <div
@@ -195,7 +204,7 @@ export async function GET(req: Request) {
                                     marginRight: 12,
                                 }}
                             >
-                                SI ×{eur(mercado.baseSi)}
+                                SI ×{eur(mercado.si)}
                             </div>
                             <div
                                 style={{
@@ -208,7 +217,7 @@ export async function GET(req: Request) {
                                     fontWeight: 700,
                                 }}
                             >
-                                NON ×{eur(mercado.baseNon)}
+                                NON ×{eur(mercado.non)}
                             </div>
                         </div>
                     </div>
@@ -231,6 +240,10 @@ export async function GET(req: Request) {
                 </div>
             </div>
         ),
-        { width: W, height: H },
+        {
+            width: W,
+            height: H,
+            headers: { 'cache-control': 'no-store, max-age=0, must-revalidate' },
+        },
     );
 }

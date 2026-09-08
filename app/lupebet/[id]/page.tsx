@@ -78,7 +78,7 @@ export default async function BoletoPage({ params }: { params: Params }) {
 
                 <div className="max-w-md mx-auto">
                     <div className="flex justify-center mt-4">
-                        <BoletoShare id={boleto.id} nombre={boleto.nombre} />
+                        <BoletoShare id={boleto.id} nombre={boleto.nombre} sello={apostas.total} />
                     </div>
 
                     <ApostarPanel

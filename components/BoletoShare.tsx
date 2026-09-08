@@ -12,7 +12,17 @@ import { Button } from '@/components/ui/button';
  * Safari rechazaría el navigator.share(). Si el navegador no sabe compartir
  * ficheros, se cae al enlace de siempre (que ya lleva la miniatura en og:image).
  */
-export function BoletoShare({ id, nombre }: { id: string; nombre: string }) {
+export function BoletoShare({
+    id,
+    nombre,
+    sello = 0,
+}: {
+    id: string;
+    nombre: string;
+    /** Moedas apostadas. Cambia → se vuelve a pedir la imagen, para que las
+     *  cuotas del PNG sean las de ahora y no las de cuando se abrió la página. */
+    sello?: number;
+}) {
     const file = useRef<File | null>(null);
     const [listo, setListo] = useState(false);
     const [sharing, setSharing] = useState(false);
@@ -21,7 +31,9 @@ export function BoletoShare({ id, nombre }: { id: string; nombre: string }) {
 
     useEffect(() => {
         let vivo = true;
-        fetch(imgUrl)
+        // Marca de tiempo + no-store: la imagen lleva las cuotas del momento, así
+        // que no vale una copia guardada de hace media hora.
+        fetch(`${imgUrl}&t=${Date.now()}`, { cache: 'no-store' })
             .then((res) => (res.ok ? res.blob() : null))
             .then((blob) => {
                 if (!vivo || !blob) return;
@@ -30,7 +42,7 @@ export function BoletoShare({ id, nombre }: { id: string; nombre: string }) {
             })
             .catch(() => { /* se comparte el enlace y ya */ });
         return () => { vivo = false; };
-    }, [imgUrl, id]);
+    }, [imgUrl, id, sello]);
 
     const share = async () => {
         const url = `${window.location.origin}/lupebet/${encodeURIComponent(id)}`;
