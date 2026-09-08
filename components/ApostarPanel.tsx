@@ -61,12 +61,17 @@ export function ApostarPanel({ boletoId, estado, lineas, apostas }: ApostarPanel
                 if (!vivo) return;
                 setSaldo(r.saldo);
                 setMiAposta(r.aposta);
+                // Con menos de 25 moedas la aposta por defecto no cabría.
+                setCantidad((c) => Math.max(1, Math.min(c, r.saldo)));
             })
             .catch(() => { /* se queda en "cargando" y no deja apostar */ });
         return () => { vivo = false; };
     }, [boletoId]);
 
     const pechado = estado !== 'aberto';
+    // Se pode xogar todo o saldo: o tope real é o que tes (MAX_APOSTA só é a
+    // rede de seguridade do servidor).
+    const tope = Math.max(1, Math.min(MAX_APOSTA, saldo ?? 100));
 
     // Las cuotas se mueven con las moedas que hay a cada lado, igual que un
     // mercado de verdad. Se calculan aquí solo para pintarlas: la buena la pone
@@ -150,7 +155,7 @@ export function ApostarPanel({ boletoId, estado, lineas, apostas }: ApostarPanel
                     </div>
 
                     <div className="flex flex-wrap gap-2">
-                        {ATALLOS.map((n) => (
+                        {ATALLOS.filter((n) => n <= tope).map((n) => (
                             <button
                                 key={n}
                                 type="button"
@@ -164,12 +169,26 @@ export function ApostarPanel({ boletoId, estado, lineas, apostas }: ApostarPanel
                                 {n}
                             </button>
                         ))}
+                        {/* Jugárselo todo tiene que ser un botón: con el
+                            deslizador nunca cae justo en el saldo exacto. */}
+                        <button
+                            type="button"
+                            onClick={() => setCantidad(tope)}
+                            disabled={saldo === null}
+                            className={`px-3 py-1.5 rounded-full text-sm font-bold border transition-colors disabled:opacity-50 ${
+                                saldo !== null && cantidad === tope
+                                    ? 'bg-primary text-primary-foreground border-primary'
+                                    : 'hover:bg-muted'
+                            }`}
+                        >
+                            Todas
+                        </button>
                     </div>
 
                     <input
                         type="range"
                         min={1}
-                        max={Math.max(1, Math.min(MAX_APOSTA, saldo ?? MAX_APOSTA))}
+                        max={tope}
                         value={cantidad}
                         aria-label="Moedas a apostar"
                         onChange={(e) => setCantidad(Number(e.target.value))}

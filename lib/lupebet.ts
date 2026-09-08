@@ -37,8 +37,9 @@ export type EstadoBoleto = 'aberto' | 'ganado' | 'perdido';
 
 /** Moedas con las que arranca cada móvil la primera vez. */
 export const SALDO_INICIAL = 1000;
-/** Tope por apuesta, para que nadie funda el saldo de golpe sin querer. */
-export const MAX_APOSTA = 500;
+/** Tope duro por apuesta. Antes eran 500 y no dejaba jugarse el saldo entero;
+ *  ahora el que manda es el saldo y esto solo es red de seguridad. */
+export const MAX_APOSTA = 100000;
 
 /** A favor de que el boleto salga, o en contra. */
 export type LadoAposta = 'si' | 'non';

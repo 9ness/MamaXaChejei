@@ -34,79 +34,88 @@ export default async function LupeBetPage({ searchParams }: { searchParams: Sear
 
     const destacados = boletos.filter((b) => b.destacado);
 
-    // Cada bloque en su pestaña: la página tenía cuatro secciones seguidas y en
-    // el móvil llegar a la clasificación era un scroll eterno.
-    const pestanas: Pestana[] = [];
+    // Tres pestañas y no más: tienen que caber enteras en la pantalla del móvil
+    // sin arrastrar. Los destacados no son una sección aparte, van arriba de los
+    // boletos, que es donde se buscan.
+    const pestanas: Pestana[] = [
+        {
+            id: 'boletos',
+            label: '🎟️ Boletos',
+            contido: (
+                <div className="space-y-8">
+                    {destacados.length > 0 && (
+                        <div>
+                            <h2 className="text-center text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">
+                                ⭐ Os pronósticos da peña
+                            </h2>
+                            <BoletosDestacados boletos={destacados} isAdmin={admin} />
+                            <p className="text-center text-[11px] text-muted-foreground mt-2">
+                                Os que escolleu a organización. Métete a favor ou en contra. 👀
+                            </p>
+                        </div>
+                    )}
 
-    if (destacados.length > 0) {
-        pestanas.push({
-            id: 'destacados',
-            label: '⭐ Destacados',
-            contido: <BoletosDestacados boletos={destacados} isAdmin={admin} />,
+                    <div>
+                        {destacados.length > 0 && (
+                            <h2 className="text-center text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">
+                                Todos os boletos
+                            </h2>
+                        )}
+                        <BoletoList boletos={boletos} isAdmin={admin} />
+                    </div>
+                </div>
+            ),
+            pe: admin ? (
+                <p className="text-center text-[11px] text-muted-foreground mt-3">
+                    🛡️ Toca a ⭐ dun boleto para subilo aos pronósticos da peña.
+                </p>
+            ) : null,
+        },
+        {
+            id: 'oficial',
+            label: '👕 Boleto camiseta',
+            contido: (
+                <BoletoTicket
+                    titulo={BOLETO_OFICIAL.titulo}
+                    idBoleto={BOLETO_OFICIAL.idBoleto}
+                    codigo={BOLETO_OFICIAL.codigo}
+                    fecha={BOLETO_OFICIAL.fecha}
+                    estado={BOLETO_OFICIAL.estado}
+                    lineas={[...BOLETO_OFICIAL.lineas]}
+                    importe={BOLETO_OFICIAL.importe}
+                    cuotaTotal={BOLETO_OFICIAL.cuotaTotal}
+                    ganancia={BOLETO_OFICIAL.ganancia}
+                />
+            ),
+        },
+        {
+            id: 'ranking',
+            label: '🪙 Clasificación',
+            contido: ranking.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">
+                    Aínda non hai ninguén na clasificación. Ponte un nome aí arriba e
+                    aposta nun boleto. 🪙
+                </p>
+            ) : (
+                <ol className="rounded-lg border bg-card divide-y">
+                    {ranking.map((p, i) => (
+                        <li key={i} className="flex items-center gap-3 px-4 py-2.5">
+                            <span className="w-6 text-sm font-bold text-muted-foreground tabular-nums">
+                                {i + 1}
+                            </span>
+                            <span className="flex-1 truncate font-medium">{p.nombre}</span>
+                            <span className="font-bold tabular-nums">{p.saldo}</span>
+                        </li>
+                    ))}
+                </ol>
+            ),
             pe: (
                 <p className="text-center text-[11px] text-muted-foreground mt-3">
-                    Os pronósticos que escolleu a organización. Métete a favor ou en contra. 👀
+                    Cada móbil empeza con 1000 moedas. Son de broma, non serven para nada. 🎈
                 </p>
             ),
-        });
-    }
-
-    pestanas.push({
-        id: 'boletos',
-        label: '🎟️ Os boletos da peña',
-        contido: <BoletoList boletos={boletos} isAdmin={admin} />,
-        pe: admin ? (
-            <p className="text-center text-[11px] text-muted-foreground mt-3">
-                🛡️ Toca a ⭐ dun boleto para subilo aos destacados.
-            </p>
-        ) : null,
-    });
-
-    pestanas.push({
-        id: 'oficial',
-        label: '👕 Boleto oficial',
-        contido: (
-            <BoletoTicket
-                titulo={BOLETO_OFICIAL.titulo}
-                idBoleto={BOLETO_OFICIAL.idBoleto}
-                codigo={BOLETO_OFICIAL.codigo}
-                fecha={BOLETO_OFICIAL.fecha}
-                estado={BOLETO_OFICIAL.estado}
-                lineas={[...BOLETO_OFICIAL.lineas]}
-                importe={BOLETO_OFICIAL.importe}
-                cuotaTotal={BOLETO_OFICIAL.cuotaTotal}
-                ganancia={BOLETO_OFICIAL.ganancia}
-            />
-        ),
-    });
-
-    pestanas.push({
-        id: 'ranking',
-        label: '🪙 Clasificación',
-        contido: ranking.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">
-                Aínda non hai ninguén na clasificación. Ponte un nome aí arriba e
-                aposta nun boleto. 🪙
-            </p>
-        ) : (
-            <ol className="rounded-lg border bg-card divide-y">
-                {ranking.map((p, i) => (
-                    <li key={i} className="flex items-center gap-3 px-4 py-2.5">
-                        <span className="w-6 text-sm font-bold text-muted-foreground tabular-nums">
-                            {i + 1}
-                        </span>
-                        <span className="flex-1 truncate font-medium">{p.nombre}</span>
-                        <span className="font-bold tabular-nums">{p.saldo}</span>
-                    </li>
-                ))}
-            </ol>
-        ),
-        pe: (
-            <p className="text-center text-[11px] text-muted-foreground mt-3">
-                Cada móbil empeza con 1000 moedas. Son de broma, non serven para nada. 🎈
-            </p>
-        ),
-    });
+        },
+    ];
 
     return (
         <main className="min-h-screen bg-gray-50/50 dark:bg-zinc-950">
