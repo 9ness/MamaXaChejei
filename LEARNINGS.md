@@ -39,4 +39,6 @@
 * [2026-09-08] Sin tope al multiplicador, un boleto de 8 líneas a cuota 50 paga 39.000 millones de moedas / `MAX_MULTIPLICADOR = 500` y `MAX_CUOTA` bajada de 999 a 50.
 * [2026-09-08] Una cuota ES una probabilidad (`p = 1/cuota`) y la contraria sale de `1/(1+margen-p)` / la gente no piensa en cuotas: el formulario pide el % con un deslizador y enseña la cuota, no al revés.
 * [2026-09-08] Las carpetas `app/__algo` no generan ruta: Next las trata como privadas. Para una página de pruebas, nombre sin guiones bajos delante.
+* [2026-09-08] Compartir por query (`/lupebet?b=<id>`) funciona pero no es una URL de recurso / cada boleto pasó a `/lupebet/<id>` con su propio generateMetadata, y la query se quedó como redirect 307 para no romper lo ya compartido.
+* [2026-09-08] Contar apostantes por boleto con `hlen` sería una consulta por tarjeta / un contador aparte (`fiesta:apostas_n`) que se lee de un tirón con `hgetall` al pintar la lista.
 

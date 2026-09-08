@@ -33,7 +33,7 @@ export function BoletoShare({ id, nombre }: { id: string; nombre: string }) {
     }, [imgUrl, id]);
 
     const share = async () => {
-        const url = `${window.location.origin}/lupebet?b=${encodeURIComponent(id)}`;
+        const url = `${window.location.origin}/lupebet/${encodeURIComponent(id)}`;
         const text = `O boleto de ${nombre} na LupeBet 🎟️ Juadalupe'26`;
 
         setSharing(true);

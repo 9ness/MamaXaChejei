@@ -25,9 +25,10 @@ export interface Boleto {
     ts: number;
     /** Lo pone el admin al cerrarlo. Sin resolver = 'aberto'. */
     estado?: EstadoBoleto;
-    /** Moedas apostadas en total. Contador aparte, para no leer las apuestas
-     *  de los 200 boletos cada vez que se pinta la lista. */
+    /** Moedas apostadas y cuánta gente apostó. Contadores aparte, para no leer
+     *  las apuestas de los 200 boletos cada vez que se pinta la lista. */
     apostado?: number;
+    apostantes?: number;
 }
 
 export type EstadoBoleto = 'aberto' | 'ganado' | 'perdido';

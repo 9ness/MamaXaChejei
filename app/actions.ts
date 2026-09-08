@@ -680,10 +680,11 @@ export async function getBoletos(): Promise<Boleto[]> {
     try {
         // El estado va en su propia HASH: marcarlo no tiene que reescribir la
         // lista entera de boletos.
-        const [raw, estados, totales] = await Promise.all([
+        const [raw, estados, totales, cuantos] = await Promise.all([
             redis.lrange(BOLETOS_KEY, 0, BOLETOS_MAX - 1),
             redis.hgetall<Record<string, string>>(`${NAMESPACE}:boletos_estado`),
             redis.hgetall<Record<string, string | number>>(`${NAMESPACE}:apostas_total`),
+            redis.hgetall<Record<string, string | number>>(`${NAMESPACE}:apostas_n`),
         ]);
         return raw
             .map((s: string | object) => {
@@ -698,6 +699,7 @@ export async function getBoletos(): Promise<Boleto[]> {
                 ...b,
                 estado: (estados?.[b.id] as EstadoBoleto) ?? 'aberto',
                 apostado: Number(totales?.[b.id]) || 0,
+                apostantes: Number(cuantos?.[b.id]) || 0,
             }));
     } catch {
         return [];
@@ -741,6 +743,7 @@ const MOEDAS_NOME_KEY = `${NAMESPACE}:moedas_nome`; // HASH anonId -> nombre
 const APOSTAS_PREFIX = `${NAMESPACE}:apostas:`;     // HASH anonId -> Aposta (JSON)
 const ESTADOS_KEY = `${NAMESPACE}:boletos_estado`;  // HASH boletoId -> estado
 const APOSTAS_TOTAL_KEY = `${NAMESPACE}:apostas_total`; // HASH boletoId -> moedas
+const APOSTAS_N_KEY = `${NAMESPACE}:apostas_n`;         // HASH boletoId -> nº de apostantes
 
 function limpiaAnonId(id: unknown): string | null {
     if (typeof id !== 'string') return null;
@@ -839,7 +842,9 @@ export async function apostar(
 
         await redis.hset(MOEDAS_NOME_KEY, { [id]: aposta.nombre });
         await redis.hincrby(APOSTAS_TOTAL_KEY, boletoId, cantidad);
+        await redis.hincrby(APOSTAS_N_KEY, boletoId, 1);
         revalidatePath('/lupebet');
+        revalidatePath(`/lupebet/${boletoId}`);
         return { saldo };
     } catch {
         return { error: 'Non se puido rexistrar a aposta.' };
@@ -882,6 +887,7 @@ export async function resolverBoleto(
         }
 
         revalidatePath('/lupebet');
+        revalidatePath(`/lupebet/${boletoId}`);
         return { success: true };
     } catch {
         return { error: 'Non se puido pechar o boleto.' };

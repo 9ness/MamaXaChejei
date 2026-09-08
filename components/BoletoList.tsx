@@ -37,7 +37,7 @@ export function BoletoList({ boletos, isAdmin = false }: { boletos: Boleto[]; is
             {visibles.map((b) => (
                 <li key={b.id} className="relative">
                     <Link
-                        href={`/lupebet?b=${encodeURIComponent(b.id)}`}
+                        href={`/lupebet/${encodeURIComponent(b.id)}`}
                         className="block border rounded-lg p-4 bg-card hover:border-primary transition-colors h-full"
                     >
                         <div className="flex items-baseline justify-between gap-3">
@@ -59,7 +59,8 @@ export function BoletoList({ boletos, isAdmin = false }: { boletos: Boleto[]; is
                                 )}
                                 {(b.apostado ?? 0) > 0 && (
                                     <span className="text-[11px] text-muted-foreground tabular-nums">
-                                        🪙 {b.apostado} moedas
+                                        🪙 {b.apostado} moedas · {b.apostantes ?? 0}{' '}
+                                        {b.apostantes === 1 ? 'persoa' : 'persoas'}
                                     </span>
                                 )}
                             </div>

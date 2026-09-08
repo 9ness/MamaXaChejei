@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, List, MapPin, Images, ShieldCheck, type LucideIcon } from 'lucide-react';
+import { Home, List, MapPin, Images, Ticket, ShieldCheck, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface NavItem {
@@ -16,6 +16,7 @@ const BASE_ITEMS: NavItem[] = [
     { href: '/lista', label: 'Lista', icon: List },
     { href: '/mapa', label: 'Mapa', icon: MapPin },
     { href: '/recuerdos', label: 'Recuerdos', icon: Images },
+    { href: '/lupebet', label: 'LupeBet', icon: Ticket },
 ];
 
 const ADMIN_ITEM: NavItem = { href: '/gestion', label: 'Gestión', icon: ShieldCheck };
@@ -58,7 +59,14 @@ export function BottomNav({ isAdmin = false }: { isAdmin?: boolean }) {
 
             {/* Móvil: barra inferior fija */}
             <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t bg-background/90 backdrop-blur-md pb-[env(safe-area-inset-bottom)]">
-                <div className={cn("grid", items.length === 5 ? "grid-cols-5" : "grid-cols-4")}>
+                {/* 4 pestañas de base, 5 con LupeBet y 6 en modo admin: a 6 quedan
+                    ~65px por hueco en un móvil estrecho, apretado pero legible. */}
+                <div
+                    className={cn(
+                        "grid",
+                        items.length >= 6 ? "grid-cols-6" : items.length === 5 ? "grid-cols-5" : "grid-cols-4",
+                    )}
+                >
                     {items.map(({ href, label, icon: Icon }) => {
                         const active = isActive(href);
                         return (
@@ -66,12 +74,12 @@ export function BottomNav({ isAdmin = false }: { isAdmin?: boolean }) {
                                 key={href}
                                 href={href}
                                 className={cn(
-                                    "flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-colors",
+                                    "flex flex-col items-center justify-center gap-0.5 py-2 px-0.5 text-[10px] font-medium transition-colors",
                                     active ? "text-primary" : "text-muted-foreground"
                                 )}
                             >
                                 <Icon className={cn("w-5 h-5", active && "scale-110 transition-transform")} />
-                                <span className="leading-none">{label}</span>
+                                <span className="leading-none truncate max-w-full">{label}</span>
                             </Link>
                         );
                     })}

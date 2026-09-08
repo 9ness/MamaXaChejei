@@ -103,6 +103,7 @@ app/
   mapa/page.tsx       # mapa Leaflet (MapaClient)
   recuerdos/page.tsx  # mural de fotos
   lupebet/page.tsx    # LupeBet: boleto oficial de la camiseta + los de la peña
+  lupebet/[id]/page.tsx       # ficha de un boleto (URL propia para compartir)
   api/og/lupebet/route.tsx    # imagen del boleto (la que se comparte)
   api/chat/route.ts   # GET/POST/DELETE/PATCH del chat (pin, unpin, react)
   api/fotos/upload/route.ts   # handleUpload de Vercel Blob (subida directa cliente)
@@ -163,6 +164,7 @@ public/               # sprites del juego (man*.png, ~2 MB cada uno)
 | `fiesta:boletos_estado` | HASH | boletoId → `ganado`/`perdido` (aparte, para no reescribir la lista) |
 | `fiesta:apostas:<boletoId>` | HASH | anonId → apuesta `{nombre, moedas, ts}` |
 | `fiesta:apostas_total` | HASH | boletoId → moedas apostadas (contador para la lista) |
+| `fiesta:apostas_n` | HASH | boletoId → nº de apostantes (mismo motivo) |
 | `fiesta:moedas` | HASH | anonId → saldo (arranca en 1000) |
 | `fiesta:moedas_nome` | HASH | anonId → nombre, solo para la clasificación |
 | `fiesta:admin_pin` | HASH | `{salt, hash}` del PIN de admin (scrypt) |
@@ -198,7 +200,9 @@ store Blob). PENDIENTE: confirmar si conviene crear un `.env.example`.
   salen de `lib/pena-colors.ts` (`--primary`, `--ring`, `--pena-from/to`) — no
   hardcodees hex de marca en componentes.
 - **Mobile-first:** la app se usa desde el móvil en la fiesta. `BottomNav` con
-  `pb-20 md:pb-0`. Valida cualquier UI nueva en pantalla estrecha.
+  `pb-20 md:pb-0`. Valida cualquier UI nueva en pantalla estrecha. La barra
+  lleva 5 pestañas (6 en modo admin) y la rejilla se ajusta sola; a 6 quedan
+  ~65px por hueco, así que no metas etiquetas más largas que "Recuerdos".
 - **Commits:** NO son Conventional Commits. La convención detectada en
   `git log` es `Área: descripción en español`, con el área como sustantivo
   capitalizado. Ej.: `Mapa: persistir la sesión de compartido y reanudarla al
@@ -279,6 +283,8 @@ store Blob). PENDIENTE: confirmar si conviene crear un `.env.example`.
     `fiesta:boletos_estado`: es lo único que impide pagar dos veces si el admin
     pulsa dos veces. Los pagos están topados por `MAX_MULTIPLICADOR` (500) —
     sin ese tope, 8 líneas a cuota 50 pagarían miles de millones.
+    Cada boleto tiene su URL, `/lupebet/<id>`; `/lupebet?b=<id>` sigue vivo pero
+    solo redirige (había enlaces compartidos con esa forma).
 
 10. **Mapa:** coordenadas del recinto y de las orquestas hardcodeadas en
     `MapaClient.tsx` (Praza de Castelao, Rianxo — hubo commits corrigiendo

@@ -122,7 +122,7 @@ export function BoletoForm() {
 
         if (res.id) {
             try { localStorage.setItem('chat_username', nombre.trim()); } catch { /* ignore */ }
-            router.push(`/lupebet?b=${encodeURIComponent(res.id)}`);
+            router.push(`/lupebet/${encodeURIComponent(res.id)}`);
             router.refresh();
             return;
         }
