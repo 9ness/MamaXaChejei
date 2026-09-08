@@ -162,6 +162,7 @@ public/               # sprites del juego (man*.png, ~2 MB cada uno)
 | `fiesta:loc_ids` | SET | índice de puntos (se auto-limpia al leer caducados) |
 | `fiesta:boletos` | LIST | boletos de broma de la peña (JSON, LTRIM 0 199) |
 | `fiesta:boletos_estado` | HASH | boletoId → `ganado`/`perdido` (aparte, para no reescribir la lista) |
+| `fiesta:boletos_destacados` | SET | boletoIds que el admin sube a "Os pronósticos da peña" |
 | `fiesta:apostas:<boletoId>` | HASH | anonId → apuesta `{nombre, moedas, ts}` |
 | `fiesta:apostas_total` | HASH | boletoId → moedas apostadas (contador para la lista) |
 | `fiesta:apostas_n` | HASH | boletoId → nº de apostantes (mismo motivo) |
@@ -285,6 +286,16 @@ store Blob). PENDIENTE: confirmar si conviene crear un `.env.example`.
     sin ese tope, 8 líneas a cuota 50 pagarían miles de millones.
     Cada boleto tiene su URL, `/lupebet/<id>`; `/lupebet?b=<id>` sigue vivo pero
     solo redirige (había enlaces compartidos con esa forma).
+
+18. **Cuotas dinámicas de LupeBet:** se apuesta a los dos lados (`si`/`non`) y
+    la cuota se mueve con las moedas de cada lado — `mercadoBoleto()` en
+    `lib/lupebet.ts` desplaza la probabilidad de salida en log-odds según la
+    presión del dinero, con `LIQUIDEZ` (300 moedas imaginarias defendiendo el
+    precio) y `DERIVA_MAX` (×2,5 como mucho). La cuota del `si` sin dinero
+    encima es EXACTAMENTE la del boleto: el margen se lo come el lado `non`.
+    La cuota se **congela** al apostar (`Aposta.cuota`, la calcula el servidor,
+    nunca el cliente) y `resolverBoleto` paga con `multiplicadorAposta()`; las
+    apuestas viejas sin `cuota` cobran a la de salida.
 
 10. **Mapa:** coordenadas del recinto y de las orquestas hardcodeadas en
     `MapaClient.tsx` (Praza de Castelao, Rianxo — hubo commits corrigiendo

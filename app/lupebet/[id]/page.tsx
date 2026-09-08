@@ -8,6 +8,7 @@ import { BoletoTicket } from '@/components/BoletoTicket';
 import { BoletoShare } from '@/components/BoletoShare';
 import { ApostarPanel } from '@/components/ApostarPanel';
 import { ResolverBoleto } from '@/components/ResolverBoleto';
+import { DestacarBoleto } from '@/components/DestacarBoleto';
 import { getApostas, getBoleto } from '@/app/actions';
 import { isAdmin } from '@/lib/admin-auth';
 
@@ -86,6 +87,15 @@ export default async function BoletoPage({ params }: { params: Params }) {
                         lineas={boleto.lineas}
                         apostas={apostas}
                     />
+
+                    {admin && (
+                        <div className="mt-4 rounded-lg border border-dashed p-3 flex items-center justify-between gap-3">
+                            <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                                {boleto.destacado ? '⭐ Está nos pronósticos da peña' : 'Destacar nos pronósticos da peña'}
+                            </p>
+                            <DestacarBoleto boletoId={boleto.id} destacado={Boolean(boleto.destacado)} />
+                        </div>
+                    )}
 
                     {admin && (boleto.estado ?? 'aberto') === 'aberto' && (
                         <ResolverBoleto boletoId={boleto.id} />

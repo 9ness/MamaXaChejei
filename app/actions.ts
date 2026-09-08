@@ -7,6 +7,7 @@ import { clientIpFromHeaders, rateLimited } from '@/lib/rate-limit';
 import {
     type Aposta,
     type ApostasBoleto,
+    type LadoAposta,
     type Boleto,
     type EstadoBoleto,
     MAX_APOSTA,
@@ -16,7 +17,8 @@ import {
     MIN_CUOTA,
     SALDO_INICIAL,
     fechaBoleto,
-    multiplicadorPago,
+    mercadoBoleto,
+    multiplicadorAposta,
 } from '@/lib/lupebet';
 import { revalidatePath, unstable_noStore as noStore } from 'next/cache';
 import { z } from 'zod';
@@ -680,12 +682,14 @@ export async function getBoletos(): Promise<Boleto[]> {
     try {
         // El estado va en su propia HASH: marcarlo no tiene que reescribir la
         // lista entera de boletos.
-        const [raw, estados, totales, cuantos] = await Promise.all([
+        const [raw, estados, totales, cuantos, destacados] = await Promise.all([
             redis.lrange(BOLETOS_KEY, 0, BOLETOS_MAX - 1),
             redis.hgetall<Record<string, string>>(`${NAMESPACE}:boletos_estado`),
             redis.hgetall<Record<string, string | number>>(`${NAMESPACE}:apostas_total`),
             redis.hgetall<Record<string, string | number>>(`${NAMESPACE}:apostas_n`),
+            redis.smembers(`${NAMESPACE}:boletos_destacados`),
         ]);
+        const marcados = new Set((destacados ?? []).map(String));
         return raw
             .map((s: string | object) => {
                 try {
@@ -700,6 +704,7 @@ export async function getBoletos(): Promise<Boleto[]> {
                 estado: (estados?.[b.id] as EstadoBoleto) ?? 'aberto',
                 apostado: Number(totales?.[b.id]) || 0,
                 apostantes: Number(cuantos?.[b.id]) || 0,
+                destacado: marcados.has(b.id),
             }));
     } catch {
         return [];
@@ -744,6 +749,7 @@ const APOSTAS_PREFIX = `${NAMESPACE}:apostas:`;     // HASH anonId -> Aposta (JS
 const ESTADOS_KEY = `${NAMESPACE}:boletos_estado`;  // HASH boletoId -> estado
 const APOSTAS_TOTAL_KEY = `${NAMESPACE}:apostas_total`; // HASH boletoId -> moedas
 const APOSTAS_N_KEY = `${NAMESPACE}:apostas_n`;         // HASH boletoId -> nº de apostantes
+const DESTACADOS_KEY = `${NAMESPACE}:boletos_destacados`; // SET de boletoId destacados polo admin
 
 function limpiaAnonId(id: unknown): string | null {
     if (typeof id !== 'string') return null;
@@ -766,12 +772,14 @@ export async function getSaldo(anonId: string): Promise<number> {
     }
 }
 
+const SEN_APOSTAS: ApostasBoleto = { total: 0, totalSi: 0, totalNon: 0, apostantes: [] };
+
 export async function getApostas(boletoId: string): Promise<ApostasBoleto> {
     noStore();
-    if (!boletoId) return { total: 0, apostantes: [] };
+    if (!boletoId) return SEN_APOSTAS;
     try {
         const raw = await redis.hgetall<Record<string, string | Aposta>>(`${APOSTAS_PREFIX}${boletoId}`);
-        if (!raw) return { total: 0, apostantes: [] };
+        if (!raw) return SEN_APOSTAS;
 
         const apostantes = Object.values(raw)
             .map((v) => {
@@ -784,9 +792,14 @@ export async function getApostas(boletoId: string): Promise<ApostasBoleto> {
             .filter((a): a is Aposta => Boolean(a && Number.isFinite(a.moedas)))
             .sort((a, b) => b.moedas - a.moedas);
 
-        return { total: apostantes.reduce((n, a) => n + a.moedas, 0), apostantes };
+        const suma = (lado: LadoAposta) =>
+            apostantes.filter((a) => (a.lado ?? 'si') === lado).reduce((n, a) => n + a.moedas, 0);
+
+        const totalSi = suma('si');
+        const totalNon = suma('non');
+        return { total: totalSi + totalNon, totalSi, totalNon, apostantes };
     } catch {
-        return { total: 0, apostantes: [] };
+        return SEN_APOSTAS;
     }
 }
 
@@ -800,7 +813,8 @@ export async function apostar(
     anonId: string,
     nombre: string,
     moedas: number,
-): Promise<{ saldo?: number; error?: string }> {
+    lado: LadoAposta = 'si',
+): Promise<{ saldo?: number; cuota?: number; error?: string }> {
     const id = limpiaAnonId(anonId);
     if (!id) return { error: 'Non se puido identificar o dispositivo.' };
 
@@ -821,11 +835,20 @@ export async function apostar(
             return { error: 'Ese boleto xa está pechado.' };
         }
 
+        // La cuota se calcula AQUÍ, con el dinero que hay ahora mismo en el
+        // boleto: la del navegador es solo un adorno y no se acepta a ciegas.
+        // Se guarda con la apuesta y ya no se toca, como en las casas de verdad.
+        const meu: LadoAposta = lado === 'non' ? 'non' : 'si';
+        const antes = await getApostas(boletoId);
+        const mercado = mercadoBoleto(boleto.lineas, antes.totalSi, antes.totalNon);
+
         const key = `${APOSTAS_PREFIX}${boletoId}`;
         const aposta: Aposta = {
             nombre: (nombre || 'Anónimo').trim().slice(0, 24) || 'Anónimo',
             moedas: cantidad,
             ts: Date.now(),
+            lado: meu,
+            cuota: meu === 'si' ? mercado.si : mercado.non,
         };
 
         const reservado = await redis.hsetnx(key, id, JSON.stringify(aposta));
@@ -845,7 +868,7 @@ export async function apostar(
         await redis.hincrby(APOSTAS_N_KEY, boletoId, 1);
         revalidatePath('/lupebet');
         revalidatePath(`/lupebet/${boletoId}`);
-        return { saldo };
+        return { saldo, cuota: aposta.cuota };
     } catch {
         return { error: 'Non se puido rexistrar a aposta.' };
     }
@@ -870,19 +893,22 @@ export async function resolverBoleto(
         const primero = await redis.hsetnx(ESTADOS_KEY, boletoId, resultado);
         if (!primero) return { error: 'Ese boleto xa estaba resolto.' };
 
-        if (resultado === 'ganado') {
-            const key = `${APOSTAS_PREFIX}${boletoId}`;
-            const raw = await redis.hgetall<Record<string, string | Aposta>>(key);
-            const mult = multiplicadorPago(boleto.lineas);
+        // Gana un lado u otro: si el boleto sale, cobran los que fueron a favor;
+        // si no sale, cobran los que apostaron en contra. Cada uno cobra a SU
+        // cuota, la que congeló al apostar — el que entró antes cobra mejor.
+        const ladoGanador: LadoAposta = resultado === 'ganado' ? 'si' : 'non';
 
-            for (const [anonId, v] of Object.entries(raw ?? {})) {
-                try {
-                    const a = (typeof v === 'object' ? v : JSON.parse(v)) as Aposta;
-                    const pago = Math.round(a.moedas * mult);
-                    if (pago > 0) await redis.hincrby(MOEDAS_KEY, anonId, pago);
-                } catch {
-                    // una apuesta corrupta no debe cortar el pago de las demás
-                }
+        const key = `${APOSTAS_PREFIX}${boletoId}`;
+        const raw = await redis.hgetall<Record<string, string | Aposta>>(key);
+
+        for (const [anonId, v] of Object.entries(raw ?? {})) {
+            try {
+                const a = (typeof v === 'object' ? v : JSON.parse(v)) as Aposta;
+                if ((a.lado ?? 'si') !== ladoGanador) continue;
+                const pago = Math.round(a.moedas * multiplicadorAposta(a, boleto.lineas));
+                if (pago > 0) await redis.hincrby(MOEDAS_KEY, anonId, pago);
+            } catch {
+                // una apuesta corrupta no debe cortar el pago de las demás
             }
         }
 
@@ -891,6 +917,30 @@ export async function resolverBoleto(
         return { success: true };
     } catch {
         return { error: 'Non se puido pechar o boleto.' };
+    }
+}
+
+/**
+ * El admin destaca un pronóstico: sale arriba del todo en /lupebet, en "Os
+ * pronósticos da peña". Va en su propio SET, igual que el estado: destacar no
+ * tiene que reescribir la lista entera de boletos.
+ */
+export async function destacarBoleto(
+    boletoId: string,
+    destacar: boolean,
+): Promise<{ success?: true; error?: string }> {
+    if (!(await isAdminRequest())) return { error: 'No autorizado' };
+    if (!boletoId) return { error: 'Falta o boleto.' };
+
+    try {
+        if (destacar) await redis.sadd(DESTACADOS_KEY, boletoId);
+        else await redis.srem(DESTACADOS_KEY, boletoId);
+
+        revalidatePath('/lupebet');
+        revalidatePath(`/lupebet/${boletoId}`);
+        return { success: true };
+    } catch {
+        return { error: 'Non se puido destacar o boleto.' };
     }
 }
 

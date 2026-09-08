@@ -29,6 +29,8 @@ export interface Boleto {
      *  las apuestas de los 200 boletos cada vez que se pinta la lista. */
     apostado?: number;
     apostantes?: number;
+    /** Lo marca el admin: sale arriba, en "Os pronósticos da peña". */
+    destacado?: boolean;
 }
 
 export type EstadoBoleto = 'aberto' | 'ganado' | 'perdido';
@@ -38,14 +40,24 @@ export const SALDO_INICIAL = 1000;
 /** Tope por apuesta, para que nadie funda el saldo de golpe sin querer. */
 export const MAX_APOSTA = 500;
 
+/** A favor de que el boleto salga, o en contra. */
+export type LadoAposta = 'si' | 'non';
+
 export interface Aposta {
     nombre: string;
     moedas: number;
     ts: number;
+    /** Las apuestas de antes de existir los dos lados eran todas a favor. */
+    lado?: LadoAposta;
+    /** La cuota que había EN EL MOMENTO de apostar, congelada como en las casas
+     *  de verdad. Las apuestas viejas no la tienen: cobran a la de salida. */
+    cuota?: number;
 }
 
 export interface ApostasBoleto {
     total: number;
+    totalSi: number;
+    totalNon: number;
     apostantes: Aposta[];
 }
 
@@ -103,9 +115,116 @@ export function ganancia(importe: number, lineas: BoletoLinea[]): number {
     return importe * cuotaTotal(lineas);
 }
 
-/** Lo que se paga de verdad al resolver, ya con el tope aplicado. */
+/** Lo que paga apostar A FAVOR, ya con el tope aplicado. */
 export function multiplicadorPago(lineas: BoletoLinea[]): number {
     return Math.min(MAX_MULTIPLICADOR, cuotaTotal(lineas));
+}
+
+/**
+ * Lo que paga apostar EN CONTRA. Sale de la cuota contraria de la combinada
+ * entera: si el boleto es un disparate que paga 28, ir en contra es casi
+ * seguro y por eso apenas paga (se queda en el mínimo, 1,01). Es lo correcto.
+ */
+export function multiplicadorContra(lineas: BoletoLinea[]): number {
+    return Math.min(MAX_MULTIPLICADOR, cuotaContraria(cuotaTotal(lineas)));
+}
+
+// --- MERCADO: as cuotas móvense co diñeiro, como nas de verdade ---
+// Una casa de apuestas no deja la cuota quieta: si todo el mundo carga a un
+// lado, ese lado paga menos y el contrario paga más. Aquí igual, con las moedas
+// de la peña haciendo de mercado.
+
+/**
+ * Cuánto pesa la cuota de salida frente a las moedas de la peña. Con 300, las
+ * primeras apuestas mueven poco y a partir del millar manda el dinero.
+ */
+export const LIQUIDEZ = 300;
+
+/**
+ * Cuánto puede llegar a moverse el precio como mucho, con el mercado entero a
+ * un lado: la probabilidad (en apuestas, la "cuota justa") no se va más del
+ * ×2,5 arriba ni abajo de la de salida. Sin freno, cuatro apuestas dejarían la
+ * cuota irreconocible respecto a la que pone el boleto, que es el chiste.
+ */
+export const DERIVA_MAX = 2.5;
+
+export interface Mercado {
+    /** Lo que paga cada lado AHORA MISMO, con el dinero que hay encima. */
+    si: number;
+    non: number;
+    /** Lo que pagaba sin nadie apostando, para poder enseñar el movimiento. */
+    baseSi: number;
+    baseNon: number;
+    /** Probabilidad de que salga, 0-100, ya con el dinero dentro. */
+    prob: number;
+    /** Moedas a cada lado, ya saneadas. */
+    totalSi: number;
+    totalNon: number;
+}
+
+function topeCuota(c: number): number {
+    if (!Number.isFinite(c)) return MIN_CUOTA;
+    return Math.min(MAX_MULTIPLICADOR, Math.max(MIN_CUOTA, Math.round(c * 100) / 100));
+}
+
+/**
+ * De una probabilidad a las dos cuotas. El margen de la casa se lo come entero
+ * el lado del "non", a propósito: así el "si" arranca EXACTAMENTE en la cuota
+ * que pone el boleto (que es el chiste) en vez de salir recortada.
+ */
+function cuotasDeProb(p: number): { si: number; non: number } {
+    return { si: topeCuota(1 / p), non: topeCuota(1 / (1 + MARGEN - p)) };
+}
+
+/**
+ * Estado del mercado de un boleto con las moedas que lleva cada lado.
+ *
+ * El precio se mueve en "log-odds", que es como se mueve de verdad: la presión
+ * del dinero (cuánto se desequilibra el mercado, de -1 a +1) desplaza la cuota
+ * de salida de forma suave y simétrica. Así 25 moedas apenas la rozan, y hacen
+ * falta cientos para moverla de verdad — un boleto de cuota 26 no se desploma a
+ * 3 porque alguien meta 100 moedas, pero baja a 21, y el "non" sube.
+ */
+export function mercadoBoleto(lineas: BoletoLinea[], totalSi = 0, totalNon = 0): Mercado {
+    const base = Math.max(MIN_CUOTA, cuotaTotal(lineas));
+    const pBase = Math.min(0.99, Math.max(1 / MAX_MULTIPLICADOR, 1 / base));
+
+    const si = Math.max(0, Math.floor(Number(totalSi)) || 0);
+    const non = Math.max(0, Math.floor(Number(totalNon)) || 0);
+
+    // LIQUIDEZ moedas imaginarias defendiendo el precio de salida: con poco
+    // dinero encima la presión es casi cero y la cuota no se entera.
+    const presion = (si - non) / (LIQUIDEZ + si + non);
+    const logit = Math.log(pBase / (1 - pBase)) + presion * Math.log(DERIVA_MAX);
+    const p = Math.min(0.99, Math.max(1 / MAX_MULTIPLICADOR, 1 / (1 + Math.exp(-logit))));
+
+    const ahora = cuotasDeProb(p);
+    const salida = cuotasDeProb(pBase);
+
+    return {
+        si: ahora.si,
+        non: ahora.non,
+        baseSi: salida.si,
+        baseNon: salida.non,
+        prob: Math.min(99, Math.max(1, Math.round(p * 100))),
+        totalSi: si,
+        totalNon: non,
+    };
+}
+
+/**
+ * Lo que cobra una apuesta ganadora. La cuota se CONGELA al apostar, como en
+ * las casas de verdad: el que entra pronto se lleva la cuota buena aunque
+ * después el mercado se mueva. Las apuestas viejas no la llevan guardada, así
+ * que cobran a la cuota de salida — que es justo lo que había cuando se
+ * hicieron.
+ */
+export function multiplicadorAposta(a: Aposta, lineas: BoletoLinea[]): number {
+    const congelada = Number(a.cuota);
+    if (Number.isFinite(congelada) && congelada > 1) {
+        return Math.min(MAX_MULTIPLICADOR, congelada);
+    }
+    return (a.lado ?? 'si') === 'si' ? multiplicadorPago(lineas) : multiplicadorContra(lineas);
 }
 
 /**

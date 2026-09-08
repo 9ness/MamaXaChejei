@@ -149,3 +149,12 @@
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-7px); }
 }
+/* Barra de pestañas de LupeBet: se arrastra en el móvil sin enseñar la barra
+   de scroll, que en horizontal queda fea encima de las etiquetas. */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

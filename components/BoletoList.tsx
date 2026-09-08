@@ -2,9 +2,10 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { Star, Trash2 } from 'lucide-react';
 import { type Boleto, type EstadoBoleto, cuotaTotal, eur, ganancia } from '@/lib/lupebet';
 import { deleteBoleto } from '@/app/actions';
+import { DestacarBoleto } from '@/components/DestacarBoleto';
 
 /** Lista compacta: el ticket entero solo se pinta al abrir uno, si no la página
  *  se hace eterna con 50 boletos. */
@@ -38,15 +39,24 @@ export function BoletoList({ boletos, isAdmin = false }: { boletos: Boleto[]; is
                 <li key={b.id} className="relative">
                     <Link
                         href={`/lupebet/${encodeURIComponent(b.id)}`}
-                        className="block border rounded-lg p-4 bg-card hover:border-primary transition-colors h-full"
+                        className={`block border rounded-lg p-4 hover:border-primary transition-colors h-full ${
+                            b.destacado ? 'border-amber-300 bg-amber-50/50 dark:bg-amber-950/10' : 'bg-card'
+                        }`}
                     >
-                        <div className="flex items-baseline justify-between gap-3">
-                            <span className="font-bold truncate">{b.nombre}</span>
+                        {/* Con el admin encendido hay dos iconos flotando en la
+                            esquina: sin este hueco se comen el "1 liña". */}
+                        <div className={`flex items-baseline justify-between gap-3 ${isAdmin ? 'pr-16' : ''}`}>
+                            <span className="font-bold truncate">
+                                {b.destacado && (
+                                    <Star className="inline w-3.5 h-3.5 mb-0.5 mr-1 text-amber-500 fill-current" />
+                                )}
+                                {b.nombre}
+                            </span>
                             <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
                                 {b.lineas.length} liña{b.lineas.length === 1 ? '' : 's'}
                             </span>
                         </div>
-                        <p className="text-xs text-muted-foreground uppercase tracking-wide truncate mt-0.5">
+                        <p className={`text-xs text-muted-foreground uppercase tracking-wide truncate mt-0.5 ${isAdmin ? 'pr-16' : ''}`}>
                             {b.titulo}
                         </p>
 
@@ -76,14 +86,17 @@ export function BoletoList({ boletos, isAdmin = false }: { boletos: Boleto[]; is
                     </Link>
 
                     {isAdmin && (
-                        <button
-                            type="button"
-                            aria-label={`Borrar o boleto de ${b.nombre}`}
-                            onClick={() => handleDelete(b.id)}
-                            className="absolute top-2 right-2 p-1.5 rounded-md text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors"
-                        >
-                            <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="absolute top-2 right-2 flex items-center">
+                            <DestacarBoleto boletoId={b.id} destacado={Boolean(b.destacado)} />
+                            <button
+                                type="button"
+                                aria-label={`Borrar o boleto de ${b.nombre}`}
+                                onClick={() => handleDelete(b.id)}
+                                className="p-1.5 rounded-md text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                            </button>
+                        </div>
                     )}
                 </li>
             ))}
