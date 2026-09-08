@@ -772,6 +772,52 @@ export async function getSaldo(anonId: string): Promise<number> {
     }
 }
 
+/**
+ * Quen es na LupeBet: saldo e o nome co que sae na clasificación. Non hai
+ * contas — o nome é o mesmo do chat, gardado no navegador; aquí só se copia a
+ * Redis para que a clasificación poida pintalo.
+ */
+export async function getPerfilMoedas(anonId: string): Promise<{ saldo: number; nome: string }> {
+    noStore();
+    const id = limpiaAnonId(anonId);
+    if (!id) return { saldo: 0, nome: '' };
+
+    const saldo = await getSaldo(id);
+    try {
+        const nome = await redis.hget<string>(MOEDAS_NOME_KEY, id);
+        return { saldo, nome: nome ? String(nome) : '' };
+    } catch {
+        return { saldo, nome: '' };
+    }
+}
+
+/** Fixa o nome do dispositivo para a clasificación (e crea a carteira). */
+export async function gardarNomeMoedas(
+    anonId: string,
+    nombre: string,
+): Promise<{ saldo?: number; nome?: string; error?: string }> {
+    const id = limpiaAnonId(anonId);
+    if (!id) return { error: 'Non se puido identificar o dispositivo.' };
+
+    const nome = (nombre || '').trim().slice(0, 24);
+    if (nome.length < 2) return { error: 'Ponte un nome de polo menos 2 letras.' };
+
+    const ip = clientIpFromHeaders(await headers());
+    if (await rateLimited('nome_moedas', ip, 40, 60 * 60)) {
+        return { error: 'Demasiados cambios de nome. Próbao noutro anaco.' };
+    }
+
+    try {
+        await redis.hsetnx(MOEDAS_KEY, id, SALDO_INICIAL);
+        await redis.hset(MOEDAS_NOME_KEY, { [id]: nome });
+        const saldo = Number(await redis.hget<number | string>(MOEDAS_KEY, id)) || 0;
+        revalidatePath('/lupebet');
+        return { saldo, nome };
+    } catch {
+        return { error: 'Non se puido gardar o nome.' };
+    }
+}
+
 const SEN_APOSTAS: ApostasBoleto = { total: 0, totalSi: 0, totalNon: 0, apostantes: [] };
 
 export async function getApostas(boletoId: string): Promise<ApostasBoleto> {

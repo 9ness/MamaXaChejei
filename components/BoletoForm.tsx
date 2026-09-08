@@ -151,8 +151,11 @@ export function BoletoForm() {
                         onChange={(e) => setTitulo(e.target.value)}
                     />
                 </div>
+                {/* Los € del ticket son de mentira: es lo que va impreso en el
+                    boleto (como los 10€ de la camiseta). Las moedas de verdad
+                    solo se juegan apostando, y por eso se dice aquí. */}
                 <div className="grid gap-1.5">
-                    <Label htmlFor="bol-importe">Importe (€)</Label>
+                    <Label htmlFor="bol-importe">Importe do ticket (€)</Label>
                     <Input
                         id="bol-importe"
                         type="number"
@@ -162,6 +165,9 @@ export function BoletoForm() {
                         value={importe}
                         onChange={(e) => setImporte(e.target.value)}
                     />
+                    <p className="text-[11px] text-muted-foreground">
+                        De broma, para o ticket. Facer o boleto non che custa moedas.
+                    </p>
                 </div>
             </div>
 

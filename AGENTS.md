@@ -285,7 +285,9 @@ store Blob). PENDIENTE: confirmar si conviene crear un `.env.example`.
     pulsa dos veces. Los pagos están topados por `MAX_MULTIPLICADOR` (500) —
     sin ese tope, 8 líneas a cuota 50 pagarían miles de millones.
     Cada boleto tiene su URL, `/lupebet/<id>`; `/lupebet?b=<id>` sigue vivo pero
-    solo redirige (había enlaces compartidos con esa forma).
+    solo redirige (había enlaces compartidos con esa forma). La barra de usuario
+    (`LupeBetUser`) copia el nombre del chat a `fiesta:moedas_nome` nada más
+    entrar, así que en la clasificación ya sale gente que no ha apostado nunca.
 
 18. **Cuotas dinámicas de LupeBet:** se apuesta a los dos lados (`si`/`non`) y
     la cuota se mueve con las moedas de cada lado — `mercadoBoleto()` en

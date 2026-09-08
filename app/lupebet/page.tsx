@@ -6,6 +6,7 @@ import { BoletoForm } from '@/components/BoletoForm';
 import { BoletoList } from '@/components/BoletoList';
 import { BoletosDestacados } from '@/components/BoletosDestacados';
 import { LupeBetTabs, type Pestana } from '@/components/LupeBetTabs';
+import { LupeBetUser } from '@/components/LupeBetUser';
 import { getBoletos, getRankingMoedas } from '@/app/actions';
 import { isAdmin } from '@/lib/admin-auth';
 import { BOLETO_OFICIAL } from '@/lib/lupebet';
@@ -79,30 +80,33 @@ export default async function LupeBetPage({ searchParams }: { searchParams: Sear
         ),
     });
 
-    if (ranking.length > 0) {
-        pestanas.push({
-            id: 'ranking',
-            label: '🪙 Clasificación',
-            contido: (
-                <ol className="rounded-lg border bg-card divide-y">
-                    {ranking.map((p, i) => (
-                        <li key={i} className="flex items-center gap-3 px-4 py-2.5">
-                            <span className="w-6 text-sm font-bold text-muted-foreground tabular-nums">
-                                {i + 1}
-                            </span>
-                            <span className="flex-1 truncate font-medium">{p.nombre}</span>
-                            <span className="font-bold tabular-nums">{p.saldo}</span>
-                        </li>
-                    ))}
-                </ol>
-            ),
-            pe: (
-                <p className="text-center text-[11px] text-muted-foreground mt-3">
-                    Cada móbil empeza con 1000 moedas. Son de broma, non serven para nada. 🎈
-                </p>
-            ),
-        });
-    }
+    pestanas.push({
+        id: 'ranking',
+        label: '🪙 Clasificación',
+        contido: ranking.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">
+                Aínda non hai ninguén na clasificación. Ponte un nome aí arriba e
+                aposta nun boleto. 🪙
+            </p>
+        ) : (
+            <ol className="rounded-lg border bg-card divide-y">
+                {ranking.map((p, i) => (
+                    <li key={i} className="flex items-center gap-3 px-4 py-2.5">
+                        <span className="w-6 text-sm font-bold text-muted-foreground tabular-nums">
+                            {i + 1}
+                        </span>
+                        <span className="flex-1 truncate font-medium">{p.nombre}</span>
+                        <span className="font-bold tabular-nums">{p.saldo}</span>
+                    </li>
+                ))}
+            </ol>
+        ),
+        pe: (
+            <p className="text-center text-[11px] text-muted-foreground mt-3">
+                Cada móbil empeza con 1000 moedas. Son de broma, non serven para nada. 🎈
+            </p>
+        ),
+    });
 
     return (
         <main className="min-h-screen bg-gray-50/50 dark:bg-zinc-950">
@@ -117,6 +121,9 @@ export default async function LupeBetPage({ searchParams }: { searchParams: Sear
                         O boleto da camiseta e os pronósticos de broma da peña.
                     </p>
                 </div>
+
+                {/* Quen es e cantas moedas tes: o primeiro que se mira ao entrar. */}
+                <LupeBetUser />
 
                 {/* Lo primero de la página: si esto queda abajo, nadie se entera de
                     que puede hacer el suyo. <details> nativo, para no cargar el
