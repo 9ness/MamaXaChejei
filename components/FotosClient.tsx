@@ -363,15 +363,15 @@ export function FotosClient({
                                 <Input
                                     value={titulo}
                                     maxLength={80}
-                                    placeholder="Ponlle un pé (opcional)"
-                                    aria-label="Pé de foto"
+                                    placeholder="Ponlle un título (opcional)"
+                                    aria-label="Título da foto"
                                     disabled={busy}
                                     onChange={(e) => setTitulo(e.target.value)}
                                     onKeyDown={(e) => { if (e.key === 'Enter') subir(); }}
                                 />
                                 <p className="text-[11px] text-muted-foreground mt-1">
                                     {pendentes.length > 1
-                                        ? `${pendentes.length} fotos · o pé vai en todas`
+                                        ? `${pendentes.length} fotos · o título vai en todas`
                                         : 'Podes deixalo en branco.'}
                                 </p>
                             </div>
