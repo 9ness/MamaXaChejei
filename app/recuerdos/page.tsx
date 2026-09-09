@@ -14,7 +14,7 @@ export default async function RecuerdosPage() {
 
                 <div className="text-center mb-6">
                     <h1 className="text-2xl font-bold flex items-center justify-center gap-2">
-                        📸 Recuerdos
+                        📸 Recordos
                     </h1>
                     <p className="text-sm text-muted-foreground mt-1">
                         O mural da peña. Sube as túas fotos e compárteas con todos.

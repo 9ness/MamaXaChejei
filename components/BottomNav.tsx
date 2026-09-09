@@ -15,8 +15,8 @@ const BASE_ITEMS: NavItem[] = [
     { href: '/', label: 'Inicio', icon: Home },
     { href: '/lista', label: 'Lista', icon: List },
     { href: '/mapa', label: 'Mapa', icon: MapPin },
-    // "Fotos" y no "Recuerdos": con 6 pestañas la palabra larga se comía su hueco
-    // y dejaba sin aire a la de al lado. La sección se sigue llamando Recuerdos.
+    // "Fotos" y no "Recordos": con 6 pestañas la palabra larga se comía su hueco
+    // y dejaba sin aire a la de al lado. La sección se sigue llamando Recordos.
     { href: '/recuerdos', label: 'Fotos', icon: Images },
     { href: '/lupebet', label: 'LupeBet', icon: Ticket },
 ];
@@ -63,7 +63,7 @@ export function BottomNav({ isAdmin = false }: { isAdmin?: boolean }) {
             <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t bg-background/90 backdrop-blur-md pb-[env(safe-area-inset-bottom)]">
                 {/* Las columnas son exactamente iguales (1fr cada una), así que los
                     iconos van siempre a la misma distancia. Lo que se apelotona a 6
-                    huecos son las ETIQUETAS: "Recuerdos" casi llena sus ~65px y deja
+                    huecos son las ETIQUETAS: "Recordos" casi llena sus ~65px y deja
                     sin aire a la de al lado, mientras "Mapa" sobra por todos lados.
                     Por eso a 6 se baja el cuerpo de letra, para devolver el hueco. */}
                 <div
