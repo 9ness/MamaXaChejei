@@ -49,7 +49,7 @@ export async function GET() {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { nombre, mensaje, id } = body;
+        const { nombre, mensaje, id, respondeA } = body;
 
         if (!nombre || !mensaje) {
             return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
@@ -61,6 +61,17 @@ export async function POST(request: Request) {
         // Apply visual distinction for admin
         const finalNombre = isAdmin ? `${nombre} (Admin)` : nombre;
 
+        // La respuesta guarda una COPIA del mensaje original (nombre + un trozo
+        // del texto). Si luego lo borran, la cita sigue teniendo sentido y no
+        // hay que ir a buscarlo a la lista.
+        const cita = respondeA && typeof respondeA === 'object'
+            ? {
+                id: String(respondeA.id ?? '').slice(0, 64),
+                nombre: String(respondeA.nombre ?? '').slice(0, 40),
+                mensaje: String(respondeA.mensaje ?? '').slice(0, 120),
+            }
+            : null;
+
         const msg = {
             id: id || crypto.randomUUID(),
             nombre: finalNombre.slice(0, 40),
@@ -68,7 +79,8 @@ export async function POST(request: Request) {
             fecha: Date.now(),
             reacciones: {},
             isPinned: false,
-            isAdminMessage: !!isAdmin
+            isAdminMessage: !!isAdmin,
+            ...(cita && cita.id ? { respondeA: cita } : {})
         };
 
         await redis.lpush(CHAT_KEY, JSON.stringify(msg));

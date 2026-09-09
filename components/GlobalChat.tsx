@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useOptimistic, startTransition } from 'react';
-import { MessageCircle, X, Send, Trash2, Pin, PinOff, ArrowDown } from 'lucide-react';
+import { MessageCircle, X, Send, Trash2, Pin, ArrowDown, Reply } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { usePathname } from 'next/navigation';
@@ -16,6 +16,8 @@ interface ChatMessage {
     reacciones?: Record<string, number>;
     isPinned?: boolean;
     isAdminMessage?: boolean;
+    /** Copia del mensaje al que responde, para poder pintar la cita. */
+    respondeA?: { id: string; nombre: string; mensaje: string };
 }
 
 const REACTION_EMOJIS = ['😂', '❤️', '🔥', '🍻', '🥳', '💩'];
@@ -26,6 +28,7 @@ export function GlobalChat() {
     const [pinnedMessage, setPinnedMessage] = useState<ChatMessage | null>(null);
     const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
     const [showGame, setShowGame] = useState(false);
+    const [respondendo, setRespondendo] = useState<ChatMessage | null>(null);
     const [headerHighScore, setHeaderHighScore] = useState<HighScore | null>(null);
     const [totalGames, setTotalGames] = useState(0);
 
@@ -106,23 +109,29 @@ export function GlobalChat() {
         if (!newMessage.trim() || !userName.trim()) return;
 
         const tempId = Math.random().toString();
+        const cita = respondendo
+            ? { id: respondendo.id, nombre: respondendo.nombre, mensaje: respondendo.mensaje.slice(0, 120) }
+            : undefined;
+
         const msg: ChatMessage = {
             id: tempId,
             nombre: isAdmin ? `${userName} (Admin)` : userName,
             mensaje: newMessage,
             fecha: Date.now(),
             reacciones: {},
-            isAdminMessage: isAdmin
+            isAdminMessage: isAdmin,
+            ...(cita ? { respondeA: cita } : {})
         };
 
         startTransition(() => addOptimisticAction({ type: 'add', payload: msg }));
         setNewMessage('');
+        setRespondendo(null);
 
         try {
             const res = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ nombre: userName, mensaje: newMessage, id: tempId, isAdmin }),
+                body: JSON.stringify({ nombre: userName, mensaje: newMessage, id: tempId, isAdmin, respondeA: cita }),
                 cache: 'no-store'
             });
             const data = await res.json();
@@ -154,6 +163,15 @@ export function GlobalChat() {
             method: 'PATCH',
             body: JSON.stringify({ action: 'react', id, emoji })
         });
+    };
+
+    const irAoMensaxe = (id: string) => {
+        const el = document.getElementById(`msg-${id}`);
+        if (!el) return;
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Un parpadeo para que se vea cuál era: los mensajes se parecen mucho.
+        el.classList.add('ring-2', 'ring-indigo-400', 'rounded-xl');
+        setTimeout(() => el.classList.remove('ring-2', 'ring-indigo-400', 'rounded-xl'), 1200);
     };
 
     const handleScroll = () => {
@@ -238,9 +256,15 @@ export function GlobalChat() {
                         </div>
                     </div>
                     <div className="absolute top-1 right-3 flex gap-1 z-20">
-                        <Button variant="ghost" size="icon" onClick={() => setShowGame(true)} className="hover:bg-white/10 rounded-full h-8 w-8 text-white" title="Jugar">
-                            <span className="text-lg">🎮</span>
-                        </Button>
+                        {/* Con el mando a secas nadie sabía que había un juego:
+                            va con la palabra al lado. */}
+                        <button
+                            onClick={() => setShowGame(true)}
+                            className="flex items-center gap-1 h-8 pl-2 pr-2.5 rounded-full bg-white/20 hover:bg-white/30 transition-colors text-white text-[11px] font-bold"
+                            title="Xogar ao xogo das cervexas"
+                        >
+                            <span className="text-base leading-none">🎮</span> Xoga
+                        </button>
                         <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)} className="hover:bg-white/10 rounded-full h-8 w-8 text-white">
                             <X className="h-5 w-5" />
                         </Button>
@@ -323,6 +347,25 @@ export function GlobalChat() {
                                                 {msg.nombre}
                                             </span>
 
+                                            {/* A quen responde */}
+                                            {msg.respondeA && (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); irAoMensaxe(msg.respondeA!.id); }}
+                                                    className={`text-left rounded-md px-2 py-1 mb-1 border-l-2 ${
+                                                        isMe
+                                                            ? 'bg-white/15 border-white/50'
+                                                            : 'bg-black/5 border-indigo-400'
+                                                    }`}
+                                                >
+                                                    <span className="block text-[10px] font-bold leading-tight">
+                                                        {msg.respondeA.nombre}
+                                                    </span>
+                                                    <span className="block text-[11px] opacity-80 line-clamp-1 leading-tight">
+                                                        {msg.respondeA.mensaje}
+                                                    </span>
+                                                </button>
+                                            )}
+
                                             {/* Body & Time */}
                                             <div className="relative">
                                                 <span className="leading-tight break-words pr-2">{msg.mensaje}</span>
@@ -347,6 +390,19 @@ export function GlobalChat() {
                                             {activeMessageId === msg.id && (
                                                 <div className={`absolute -bottom-10 z-20 flex animate-in zoom-in-50 duration-200 ${isMe ? 'right-0 origin-top-right' : 'left-0 origin-top-left'}`}>
                                                     <div className="bg-white rounded-full shadow-xl border border-indigo-100 p-1 flex gap-1 items-center min-w-max">
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setRespondendo(msg);
+                                                                setActiveMessageId(null);
+                                                                inputRef.current?.focus();
+                                                            }}
+                                                            title="Responder"
+                                                            className="hover:bg-indigo-50 rounded-full w-8 h-8 flex items-center justify-center transition-all active:scale-95 flex-shrink-0 text-indigo-600"
+                                                        >
+                                                            <Reply className="h-4 w-4" />
+                                                        </button>
+                                                        <span className="w-px h-5 bg-slate-200 shrink-0" />
                                                         {REACTION_EMOJIS.map(emoji => (
                                                             <button
                                                                 key={emoji}
@@ -384,6 +440,26 @@ export function GlobalChat() {
                     {/* Input */}
                     <div className="p-3 bg-white border-t space-y-2 shrink-0">
                         {!userName && <p className="text-xs text-orange-600 bg-orange-50 p-2 rounded">¡Ponte nome para falar!</p>}
+
+                        {respondendo && (
+                            <div className="flex items-center gap-2 bg-slate-100 rounded-lg p-2 border-l-2 border-indigo-500">
+                                <div className="min-w-0 flex-1">
+                                    <p className="text-[10px] font-bold text-indigo-700 leading-tight">
+                                        Respondendo a {respondendo.nombre}
+                                    </p>
+                                    <p className="text-[11px] text-slate-600 line-clamp-1 leading-tight">
+                                        {respondendo.mensaje}
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={() => setRespondendo(null)}
+                                    aria-label="Cancelar a resposta"
+                                    className="shrink-0 text-slate-400 hover:text-slate-700"
+                                >
+                                    <X className="h-4 w-4" />
+                                </button>
+                            </div>
+                        )}
                         <div className="flex gap-2">
                             <Input
                                 placeholder="Tu Nombre"

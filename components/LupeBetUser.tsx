@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, Coins, Pencil } from 'lucide-react';
+import { Check, Coins } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { gardarNomeMoedas, getPerfilMoedas } from '@/app/actions';
@@ -61,54 +61,44 @@ export function LupeBetUser() {
     };
 
     return (
-        <div className="rounded-xl border bg-card px-3 py-2.5 mb-4">
-            <div className="flex items-center gap-3">
-                <span
-                    aria-hidden
-                    className="w-9 h-9 shrink-0 rounded-full bg-primary text-primary-foreground grid place-items-center font-bold"
-                >
-                    {(nome || '?').trim().charAt(0).toUpperCase()}
-                </span>
-
-                {editando ? (
-                    <>
-                        <Input
-                            autoFocus
-                            value={borrador}
-                            maxLength={24}
-                            placeholder="Como te chaman"
-                            aria-label="O teu nome"
-                            onChange={(e) => setBorrador(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === 'Enter') gardar(); }}
-                            className="h-9"
-                        />
-                        <Button size="sm" onClick={gardar} disabled={borrador.trim().length < 2}>
-                            <Check className="w-4 h-4" />
-                        </Button>
-                    </>
-                ) : (
-                    <>
+        <div className="rounded-lg border bg-card px-3 py-2 mb-4">
+            {editando ? (
+                <div className="flex items-center gap-2">
+                    <Input
+                        autoFocus
+                        value={borrador}
+                        maxLength={24}
+                        placeholder="Como te chaman"
+                        aria-label="O teu nome"
+                        onChange={(e) => setBorrador(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') gardar(); }}
+                        className="h-8"
+                    />
+                    <Button size="sm" className="h-8" onClick={gardar} disabled={borrador.trim().length < 2}>
+                        <Check className="w-4 h-4" />
+                    </Button>
+                </div>
+            ) : (
+                // Una línea y nada de avatar: esto no es un perfil, es el nombre
+                // con el que apuestas y sales en la clasificación.
+                <div className="flex items-center gap-2 text-sm">
+                    <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                        Xogas como{' '}
                         <button
                             type="button"
                             onClick={() => { setBorrador(nome); setEditando(true); }}
-                            className="min-w-0 flex-1 text-left group"
+                            className="font-bold text-foreground underline decoration-dotted underline-offset-2"
                         >
-                            <span className="block font-bold truncate group-hover:underline">
-                                {nome || 'Ponte un nome'}
-                            </span>
-                            <span className="block text-[11px] text-muted-foreground">
-                                <Pencil className="inline w-3 h-3 mr-1 mb-0.5" />
-                                {nome ? 'Toca para cambialo' : 'Para saír na clasificación'}
-                            </span>
+                            {nome || 'ponte un nome'}
                         </button>
+                    </span>
 
-                        <span className="shrink-0 inline-flex items-center gap-1.5 rounded-full bg-amber-100 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 px-3 py-1.5 font-bold tabular-nums">
-                            <Coins className="w-4 h-4" />
-                            {saldo === null ? '…' : saldo}
-                        </span>
-                    </>
-                )}
-            </div>
+                    <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 px-2.5 py-1 text-xs font-bold tabular-nums">
+                        <Coins className="w-3.5 h-3.5" />
+                        {saldo === null ? '…' : saldo}
+                    </span>
+                </div>
+            )}
 
             {error && <p className="text-xs text-red-500 mt-1.5">{error}</p>}
         </div>
