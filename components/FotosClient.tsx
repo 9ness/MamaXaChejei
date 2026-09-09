@@ -455,10 +455,6 @@ export function FotosClient({
                 <>
                     {/* Ordenar: por defecto as últimas, que é o que se mira na
                         festa; o outro é para ver as que máis gustaron. */}
-                    <p className="text-center text-[11px] text-muted-foreground">
-                        Toca dúas veces unha foto para darlle 🔥
-                    </p>
-
                     {fotos.length > 1 && (
                         <div className="flex justify-center gap-1.5">
                             {([
