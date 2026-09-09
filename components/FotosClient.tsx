@@ -177,6 +177,13 @@ export function FotosClient({
     // Qué foto acaba de encenderse, para lanzar la animación una sola vez.
     const [arde, setArde] = useState<string | null>(null);
     const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // Doble toque: el 🔥 gigante que sale encima de la foto.
+    const [lumeGrande, setLumeGrande] = useState<string | null>(null);
+    const grandeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // Un toque abre la foto, dos le dan 🔥. Hay que esperar un pelín para saber
+    // cuál de los dos era.
+    const tapPendente = useRef<{ id: string; timer: ReturnType<typeof setTimeout> } | null>(null);
+    const ultimoNoVisor = useRef(0);
     const [busy, setBusy] = useState(false);
     const [progress, setProgress] = useState('');
     const [error, setError] = useState('');
@@ -202,6 +209,8 @@ export function FotosClient({
         return () => {
             vivo = false;
             if (temporizador.current) clearTimeout(temporizador.current);
+            if (grandeTimer.current) clearTimeout(grandeTimer.current);
+            if (tapPendente.current) clearTimeout(tapPendente.current.timer);
         };
     }, []);
 
@@ -235,6 +244,43 @@ export function FotosClient({
             return;
         }
         setLikes((prev) => ({ ...prev, [id]: res.likes ?? 0 }));
+    };
+
+    /**
+     * Doble toque en la foto: da 🔥 y saca la llama grande. Si ya lo tenías, no
+     * lo quita — en Instagram el doble toque nunca deshace, y quitarlo sin
+     * querer al mirar fotos sería lo peor.
+     */
+    const dobreToque = (f: Foto) => {
+        const id = fotoId(f.url);
+        if (!id) return;
+
+        setLumeGrande(id);
+        if (grandeTimer.current) clearTimeout(grandeTimer.current);
+        grandeTimer.current = setTimeout(() => setLumeGrande(null), 800);
+
+        if (!meus.has(id)) darLike(f.url);
+    };
+
+    const toque = (f: Foto) => {
+        const id = fotoId(f.url);
+        const pendente = tapPendente.current;
+
+        if (pendente && pendente.id === id) {
+            clearTimeout(pendente.timer);
+            tapPendente.current = null;
+            dobreToque(f);
+            return;
+        }
+        if (pendente) clearTimeout(pendente.timer);
+
+        // 260 ms: lo justo para que quepa el segundo toque sin que abrir la foto
+        // se note lento.
+        const timer = setTimeout(() => {
+            tapPendente.current = null;
+            setLightbox(f);
+        }, 260);
+        tapPendente.current = { id, timer };
     };
 
     const listadas = orde === 'likes'
@@ -409,6 +455,10 @@ export function FotosClient({
                 <>
                     {/* Ordenar: por defecto as últimas, que é o que se mira na
                         festa; o outro é para ver as que máis gustaron. */}
+                    <p className="text-center text-[11px] text-muted-foreground">
+                        Toca dúas veces unha foto para darlle 🔥
+                    </p>
+
                     {fotos.length > 1 && (
                         <div className="flex justify-center gap-1.5">
                             {([
@@ -431,7 +481,10 @@ export function FotosClient({
                         </div>
                     )}
 
-                    <div className="columns-2 sm:columns-3 md:columns-4 gap-3 [&>*]:mb-3">
+                    {/* Rejilla de verdad y no columnas CSS: así SIEMPRE entran dos
+                        por fila, por estrecho que sea el móvil, y el mural se ve
+                        parejo según se van sumando fotos. */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3">
                         {listadas.map((f, i) => {
                             const id = fotoId(f.url);
                             const n = likes[id] ?? 0;
@@ -440,19 +493,28 @@ export function FotosClient({
                             return (
                                 <div
                                     key={`${f.url}-${i}`}
-                                    className="overflow-hidden rounded-lg border shadow-sm bg-card break-inside-avoid"
+                                    className="flex flex-col overflow-hidden rounded-lg border shadow-sm bg-card"
                                 >
                                     <button
-                                        onClick={() => setLightbox(f)}
-                                        className="block w-full hover:opacity-90 transition-opacity"
+                                        onClick={() => toque(f)}
+                                        aria-label={f.titulo || 'Ver o recordo'}
+                                        className="relative block w-full hover:opacity-90 transition-opacity"
                                     >
                                         {/* eslint-disable-next-line @next/next/no-img-element */}
                                         <img
                                             src={f.url}
                                             alt={f.titulo || 'Recordo da peña'}
                                             loading="lazy"
-                                            className="w-full h-auto"
+                                            className="w-full aspect-square object-cover"
                                         />
+                                        {lumeGrande === id && (
+                                            <span
+                                                aria-hidden
+                                                className="pointer-events-none absolute inset-0 flex items-center justify-center"
+                                            >
+                                                <Flame className="w-16 h-16 text-orange-500 fill-orange-400 drop-shadow-lg mxc-lume-grande" />
+                                            </span>
+                                        )}
                                     </button>
 
                                     <div className="flex items-start gap-2 px-2.5 py-2">
@@ -488,12 +550,29 @@ export function FotosClient({
                     <button className="absolute top-4 right-4 text-white/80 hover:text-white" onClick={() => setLightbox(null)}>
                         <X className="w-8 h-8" />
                     </button>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                        src={lightbox.url}
-                        alt={lightbox.titulo || 'Recordo'}
-                        className="max-w-full max-h-[85vh] rounded-lg object-contain"
-                    />
+                    <span
+                        className="relative inline-flex"
+                        onClick={(e) => {
+                            // Aquí el toque simple no hace nada (para cerrar están
+                            // la X y el fondo); el doble sí da 🔥.
+                            e.stopPropagation();
+                            const agora = Date.now();
+                            if (agora - ultimoNoVisor.current < 300) dobreToque(lightbox);
+                            ultimoNoVisor.current = agora;
+                        }}
+                    >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                            src={lightbox.url}
+                            alt={lightbox.titulo || 'Recordo'}
+                            className="max-w-full max-h-[85vh] rounded-lg object-contain"
+                        />
+                        {lumeGrande === fotoId(lightbox.url) && (
+                            <span aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                                <Flame className="w-24 h-24 text-orange-500 fill-orange-400 drop-shadow-lg mxc-lume-grande" />
+                            </span>
+                        )}
+                    </span>
                     <div className="mt-3 text-center max-w-lg">
                         {lightbox.titulo && (
                             <p className="text-sm text-white/85">{lightbox.titulo}</p>

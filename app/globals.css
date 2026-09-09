@@ -179,3 +179,17 @@
 @media (prefers-reduced-motion: reduce) {
   .mxc-lume, .mxc-pop { animation: none; }
 }
+
+/* 🔥 grande al dar doble toque en una foto, como el corazón de Instagram. */
+@keyframes mxc-lume-grande {
+  0%   { transform: scale(0.3); opacity: 0; }
+  25%  { transform: scale(1.15); opacity: 1; }
+  60%  { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1.3); opacity: 0; }
+}
+.mxc-lume-grande {
+  animation: mxc-lume-grande 0.8s ease-out forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mxc-lume-grande { animation: none; opacity: 0; }
+}
