@@ -158,3 +158,24 @@
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* 🔥 de las fotos: al encenderlo salen tres llamitas hacia arriba. */
+@keyframes mxc-lume {
+  0%   { transform: translate(0, 0) scale(0.5); opacity: 0; }
+  15%  { opacity: 1; }
+  100% { transform: translate(var(--dx, 0px), -34px) scale(1.1); opacity: 0; }
+}
+.mxc-lume {
+  animation: mxc-lume 0.9s ease-out forwards;
+}
+@keyframes mxc-pop {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.35); }
+  100% { transform: scale(1); }
+}
+.mxc-pop {
+  animation: mxc-pop 0.35s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mxc-lume, .mxc-pop { animation: none; }
+}

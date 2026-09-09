@@ -76,6 +76,67 @@ async function comprimir(file: File): Promise<File> {
     }
 }
 
+/**
+ * El botón del 🔥. Al encenderlo pega un salto y suelta tres llamitas hacia
+ * arriba (CSS puro, en globals.css). Al apagarlo no hace nada: la fiesta es
+ * darlo, no quitarlo.
+ */
+function BotonLume({
+    n,
+    meu,
+    arde,
+    grande = false,
+    onClick,
+}: {
+    n: number;
+    meu: boolean;
+    /** Acaba de encenderse: dispara la animación. */
+    arde: boolean;
+    grande?: boolean;
+    onClick: () => void;
+}) {
+    const clase = grande
+        ? `inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold transition-colors ${
+            meu ? 'bg-orange-500 text-white' : 'bg-white/15 text-white hover:bg-white/25'
+        }`
+        : `ml-auto shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-bold transition-colors ${
+            meu ? 'bg-orange-100 text-orange-700' : 'text-muted-foreground hover:bg-muted'
+        }`;
+
+    return (
+        <span className="relative inline-flex shrink-0">
+            {arde && (
+                <span aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                    {[
+                        { dx: '-14px', delay: '0ms' },
+                        { dx: '2px', delay: '90ms' },
+                        { dx: '15px', delay: '170ms' },
+                    ].map((ch, i) => (
+                        <Flame
+                            key={i}
+                            className="absolute w-4 h-4 text-orange-500 fill-orange-400 mxc-lume"
+                            style={{ ['--dx' as string]: ch.dx, animationDelay: ch.delay }}
+                        />
+                    ))}
+                </span>
+            )}
+
+            <button
+                type="button"
+                aria-pressed={meu}
+                aria-label={meu ? 'Quitar o teu 🔥' : 'Dar un 🔥'}
+                onClick={onClick}
+                className={clase}
+            >
+                <Flame
+                    className={`${grande ? 'w-4 h-4' : 'w-3.5 h-3.5'} ${meu ? 'fill-current' : ''} ${arde ? 'mxc-pop' : ''}`}
+                />
+                {(grande || n > 0) && <span className="tabular-nums">{n}</span>}
+            </button>
+        </span>
+    );
+}
+
 export function FotosClient({
     initialFotos,
     initialLikes = {},
@@ -87,6 +148,9 @@ export function FotosClient({
     const [likes, setLikes] = useState<Record<string, number>>(initialLikes);
     const [meus, setMeus] = useState<Set<string>>(new Set());
     const [orde, setOrde] = useState<'data' | 'likes'>('data');
+    // Qué foto acaba de encenderse, para lanzar la animación una sola vez.
+    const [arde, setArde] = useState<string | null>(null);
+    const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [busy, setBusy] = useState(false);
     const [progress, setProgress] = useState('');
     const [error, setError] = useState('');
@@ -109,7 +173,10 @@ export function FotosClient({
         getMeusLikes(getAnonId())
             .then((ids) => { if (vivo) setMeus(new Set(ids)); })
             .catch(() => { /* se quedan todas apagadas y ya */ });
-        return () => { vivo = false; };
+        return () => {
+            vivo = false;
+            if (temporizador.current) clearTimeout(temporizador.current);
+        };
     }, []);
 
     const darLike = async (url: string) => {
@@ -119,6 +186,11 @@ export function FotosClient({
         // Optimista: el 🔥 responde al momento y se corrige si el servidor dice
         // otra cosa.
         const tinao = meus.has(id);
+        if (!tinao) {
+            setArde(id);
+            if (temporizador.current) clearTimeout(temporizador.current);
+            temporizador.current = setTimeout(() => setArde(null), 900);
+        }
         setMeus((prev) => {
             const s = new Set(prev);
             if (tinao) s.delete(id); else s.add(id);
@@ -356,20 +428,14 @@ export function FotosClient({
                                                 {f.titulo}
                                             </span>
                                         )}
-                                        <button
-                                            type="button"
-                                            aria-pressed={meu}
-                                            aria-label={meu ? 'Quitar o teu 🔥' : 'Dar un 🔥'}
-                                            onClick={() => darLike(f.url)}
-                                            className={`ml-auto shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-bold transition-colors ${
-                                                meu
-                                                    ? 'bg-orange-100 text-orange-700'
-                                                    : 'text-muted-foreground hover:bg-muted'
-                                            }`}
-                                        >
-                                            <Flame className={`w-3.5 h-3.5 ${meu ? 'fill-current' : ''}`} />
-                                            {n > 0 && <span className="tabular-nums">{n}</span>}
-                                        </button>
+                                        <span className="ml-auto">
+                                            <BotonLume
+                                                n={n}
+                                                meu={meu}
+                                                arde={arde === id}
+                                                onClick={() => darLike(f.url)}
+                                            />
+                                        </span>
                                     </div>
                                 </div>
                             );
@@ -396,19 +462,15 @@ export function FotosClient({
                         <p className="mt-3 text-sm text-white/85 text-center max-w-lg">{lightbox.titulo}</p>
                     )}
 
-                    <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); darLike(lightbox.url); }}
-                        aria-label={meus.has(fotoId(lightbox.url)) ? 'Quitar o teu 🔥' : 'Dar un 🔥'}
-                        className={`mt-3 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold transition-colors ${
-                            meus.has(fotoId(lightbox.url))
-                                ? 'bg-orange-500 text-white'
-                                : 'bg-white/15 text-white hover:bg-white/25'
-                        }`}
-                    >
-                        <Flame className={`w-4 h-4 ${meus.has(fotoId(lightbox.url)) ? 'fill-current' : ''}`} />
-                        {likes[fotoId(lightbox.url)] ?? 0}
-                    </button>
+                    <span className="mt-3" onClick={(e) => e.stopPropagation()}>
+                        <BotonLume
+                            grande
+                            n={likes[fotoId(lightbox.url)] ?? 0}
+                            meu={meus.has(fotoId(lightbox.url))}
+                            arde={arde === fotoId(lightbox.url)}
+                            onClick={() => darLike(lightbox.url)}
+                        />
+                    </span>
                 </div>
             )}
 
