@@ -332,8 +332,15 @@ export function FotosClient({
                     onChange={onFiles}
                 />
 
-                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                    <Button onClick={() => camaraRef.current?.click()} disabled={busy} size="lg" className="w-full sm:w-auto">
+                {/* Los dos en la misma fila también en el móvil: son la misma
+                    decisión, uno debajo del otro parecían dos pasos. */}
+                <div className="flex gap-2 w-full sm:w-auto">
+                    <Button
+                        onClick={() => camaraRef.current?.click()}
+                        disabled={busy}
+                        size="lg"
+                        className="flex-1 sm:flex-none px-3"
+                    >
                         {busy ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Camera className="w-5 h-5 mr-2" />}
                         Sacar foto
                     </Button>
@@ -342,7 +349,7 @@ export function FotosClient({
                         disabled={busy}
                         size="lg"
                         variant="outline"
-                        className="w-full sm:w-auto"
+                        className="flex-1 sm:flex-none px-3"
                     >
                         <ImagePlus className="w-5 h-5 mr-2" />
                         Da galería
