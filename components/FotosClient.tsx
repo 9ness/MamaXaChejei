@@ -4,7 +4,7 @@ import { useState, useRef } from 'react';
 import { upload } from '@vercel/blob/client';
 import { addFoto, getFotos, type Foto } from '@/app/actions';
 import { Button } from '@/components/ui/button';
-import { ImagePlus, Loader2, X } from 'lucide-react';
+import { Camera, ImagePlus, Loader2, X } from 'lucide-react';
 
 // Comprime en el propio móvil antes de subir (baja calidad → poco peso).
 async function comprimir(file: File, maxDim = 1280, quality = 0.7): Promise<File> {
@@ -34,6 +34,10 @@ export function FotosClient({ initialFotos }: { initialFotos: Foto[] }) {
     const [error, setError] = useState('');
     const [lightbox, setLightbox] = useState<string | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    // Dos inputs: el de la cámara lleva `capture`, que en el móvil abre la
+    // cámara directamente en vez de la galería. No se puede tener uno solo:
+    // con `capture` puesto, ya no deja elegir de la galería.
+    const camaraRef = useRef<HTMLInputElement>(null);
 
     const onFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(e.target.files ?? []);
@@ -54,8 +58,13 @@ export function FotosClient({ initialFotos }: { initialFotos: Foto[] }) {
                 await addFoto(blob.url);
                 done++;
             } catch (err) {
+                // El motivo técnico va á consola; á peña só lle interesa saber
+                // se pode volver a intentalo.
+                const msg = err instanceof Error ? err.message : '';
                 setError(
-                    'Non se puido subir. (Se es o admin: fai falta activar Vercel Blob no panel.)',
+                    /429|demasiad/i.test(msg)
+                        ? 'Demasiadas fotos seguidas. Próbao nun anaco.'
+                        : 'Non se puido subir a foto. Téntao outra vez.',
                 );
                 console.error(err);
                 break;
@@ -67,7 +76,10 @@ export function FotosClient({ initialFotos }: { initialFotos: Foto[] }) {
         setFotos(frescas);
         setBusy(false);
         setProgress('');
+        // Se limpian los dos: si no, elegir la misma foto otra vez no dispara
+        // el onChange.
         if (inputRef.current) inputRef.current.value = '';
+        if (camaraRef.current) camaraRef.current.value = '';
     };
 
     return (
@@ -81,10 +93,31 @@ export function FotosClient({ initialFotos }: { initialFotos: Foto[] }) {
                     className="hidden"
                     onChange={onFiles}
                 />
-                <Button onClick={() => inputRef.current?.click()} disabled={busy} size="lg" className="w-full sm:w-auto">
-                    {busy ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <ImagePlus className="w-5 h-5 mr-2" />}
-                    Subir fotos
-                </Button>
+                <input
+                    ref={camaraRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={onFiles}
+                />
+
+                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                    <Button onClick={() => camaraRef.current?.click()} disabled={busy} size="lg" className="w-full sm:w-auto">
+                        {busy ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Camera className="w-5 h-5 mr-2" />}
+                        Sacar foto
+                    </Button>
+                    <Button
+                        onClick={() => inputRef.current?.click()}
+                        disabled={busy}
+                        size="lg"
+                        variant="outline"
+                        className="w-full sm:w-auto"
+                    >
+                        <ImagePlus className="w-5 h-5 mr-2" />
+                        Da galería
+                    </Button>
+                </div>
                 {progress && <p className="text-xs text-muted-foreground">{progress}</p>}
                 {error && <p className="text-xs text-red-600 text-center max-w-sm">{error}</p>}
             </div>
