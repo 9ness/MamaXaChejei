@@ -5,6 +5,7 @@ import { upload } from '@vercel/blob/client';
 import { addFoto, getFotos, getMeusLikes, toggleLike, type Foto } from '@/app/actions';
 import { getAnonId } from '@/lib/anon-id';
 import { fotoId } from '@/lib/fotos';
+import { hai } from '@/lib/tempo';
 import { Button } from '@/components/ui/button';
 import { Camera, Flame, ImagePlus, Loader2, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -74,6 +75,31 @@ async function comprimir(file: File): Promise<File> {
     } finally {
         bitmap.close?.();
     }
+}
+
+/**
+ * Cuándo se subió: "hai 38 minutos", y de una semana en adelante, la fecha.
+ * Se calcula DESPUÉS de montar, no en el render: el servidor y el móvil no
+ * tienen por qué coincidir en la hora y saldría un aviso de hidratación.
+ */
+function Cando({ ts, claro = false }: { ts: number; claro?: boolean }) {
+    const [texto, setTexto] = useState('');
+
+    useEffect(() => {
+        const pinta = () => setTexto(hai(ts, Date.now()));
+        pinta();
+        // Cada minuto, para que "agora mesmo" no se quede clavado si la pestaña
+        // se queda abierta toda la fiesta.
+        const t = setInterval(pinta, 60_000);
+        return () => clearInterval(t);
+    }, [ts]);
+
+    if (!texto) return null;
+    return (
+        <span className={`block text-[11px] ${claro ? 'text-white/60' : 'text-muted-foreground/80'}`}>
+            {texto}
+        </span>
+    );
 }
 
 /**
@@ -423,11 +449,14 @@ export function FotosClient({
                                     </button>
 
                                     <div className="flex items-start gap-2 px-2.5 py-2">
-                                        {f.titulo && (
-                                            <span className="flex-1 min-w-0 text-xs text-muted-foreground leading-snug">
-                                                {f.titulo}
-                                            </span>
-                                        )}
+                                        <span className="flex-1 min-w-0">
+                                            {f.titulo && (
+                                                <span className="block text-xs text-muted-foreground leading-snug">
+                                                    {f.titulo}
+                                                </span>
+                                            )}
+                                            <Cando ts={f.ts} />
+                                        </span>
                                         <span className="ml-auto">
                                             <BotonLume
                                                 n={n}
@@ -458,9 +487,12 @@ export function FotosClient({
                         alt={lightbox.titulo || 'Recordo'}
                         className="max-w-full max-h-[85vh] rounded-lg object-contain"
                     />
-                    {lightbox.titulo && (
-                        <p className="mt-3 text-sm text-white/85 text-center max-w-lg">{lightbox.titulo}</p>
-                    )}
+                    <div className="mt-3 text-center max-w-lg">
+                        {lightbox.titulo && (
+                            <p className="text-sm text-white/85">{lightbox.titulo}</p>
+                        )}
+                        <Cando ts={lightbox.ts} claro />
+                    </div>
 
                     <span className="mt-3" onClick={(e) => e.stopPropagation()}>
                         <BotonLume
