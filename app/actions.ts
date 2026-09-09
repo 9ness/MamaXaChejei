@@ -75,6 +75,84 @@ export async function getMembers(): Promise<Member[]> {
     }
 }
 
+/** Normaliza la talla como la carga masiva: "xxl" → 2XL, "3 anos" → 3 AÑOS. */
+function normalizaTalla(entrada: string): string {
+    const t = entrada.trim().toUpperCase().replace('ANOS', 'AÑOS');
+    if (t === 'XXL') return '2XL';
+    if (t === 'XXXL') return '3XL';
+    return t;
+}
+
+/**
+ * Alta de UNA persona. La carga masiva es para pegar la lista entera; para
+ * añadir a alguien que llega tarde no hace falta pasar por el textarea (y
+ * repegar la lista duplicaba a todo el mundo).
+ */
+export async function addMember(
+    nombreCompleto: string,
+    tallaEntrada: string,
+): Promise<{ success?: true; nombre?: string; orden?: number; error?: string }> {
+    if (!(await isAdminRequest())) return { error: 'No autorizado' };
+
+    const partes = String(nombreCompleto || '').trim().replace(/\s+/g, ' ').split(' ').filter(Boolean);
+    if (partes.length === 0) return { error: 'Falta el nombre.' };
+
+    const talla = normalizaTalla(String(tallaEntrada || ''));
+    if (!talla) return { error: 'Falta la talla.' };
+
+    // Mismo reparto que la carga masiva: el último apellido va a apellido2 y,
+    // si solo hay una palabra, apellido1 queda como "." para pasar el schema.
+    let nombre = '';
+    let apellido1 = '';
+    let apellido2 = '';
+
+    if (partes.length >= 2) {
+        apellido2 = partes.length >= 3 ? partes.pop() || '' : '';
+        apellido1 = partes.pop() || '';
+        nombre = partes.join(' ');
+    } else {
+        nombre = partes[0];
+        apellido1 = '.';
+    }
+
+    const nuevo: Member = {
+        id: crypto.randomUUID(),
+        nombre: nombre.slice(0, 40),
+        apellido1: apellido1.slice(0, 40),
+        apellido2: apellido2.slice(0, 40),
+        talla: talla.slice(0, 12),
+        pagado: false,
+        fechaPagado: '',
+        recogido: false,
+        fechaRecogido: '',
+    };
+
+    // Un nombre de una sola palabra deja apellido1 en ".", que el schema normal
+    // rechaza por corto. Es un caso real de la lista (críos), así que se valida
+    // con el mínimo relajado en ese campo y nada más.
+    const parsed = MemberSchema.extend({ apellido1: z.string().min(1) }).safeParse(nuevo);
+    if (!parsed.success) {
+        return { error: parsed.error.issues[0]?.message ?? 'Datos no válidos.' };
+    }
+
+    try {
+        // Va al final de la lista: el número siguiente al último que haya.
+        const actuales = await getMembers();
+        const orden = actuales.reduce((n, m) => Math.max(n, m.order ?? 0), 0) + 1;
+        const conOrden = { ...nuevo, order: orden };
+
+        await redis.zadd(MEMBERS_KEY, { score: orden, member: nuevo.id });
+        await redis.hset(`${NAMESPACE}:miembro:${nuevo.id}`, conOrden);
+
+        revalidatePath('/');
+        revalidatePath('/gestion');
+        revalidatePath('/lista');
+        return { success: true, nombre: `${nuevo.nombre} ${nuevo.apellido1}`.trim(), orden };
+    } catch {
+        return { error: 'No se pudo guardar. Inténtalo otra vez.' };
+    }
+}
+
 export async function bulkAddMembers(textData: string) {
     if (!(await isAdminRequest())) return { error: 'No autorizado' };
 

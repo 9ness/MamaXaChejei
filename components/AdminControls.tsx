@@ -17,6 +17,7 @@ import {
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Trash2, Upload } from 'lucide-react';
+import { AddMemberForm } from '@/components/AddMemberForm';
 
 export function AdminControls() {
     const [bulkText, setBulkText] = useState('');
@@ -40,6 +41,10 @@ export function AdminControls() {
 
     return (
         <div className="space-y-8 mt-8 border-t pt-8">
+            {/* Alta de uno en uno: lo normal del día a día. La carga masiva de
+                abajo es para pegar la lista entera de golpe. */}
+            <AddMemberForm />
+
             {/* Bulk Load Section */}
             <div className="bg-card rounded-lg border shadow-sm p-6">
                 <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
