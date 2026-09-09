@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { KeyRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -42,10 +41,7 @@ export function ChangePinForm({ hasPin }: { hasPin: boolean }) {
     };
 
     return (
-        <div className="bg-card rounded-lg border shadow-sm p-6">
-            <h3 className="text-lg font-semibold mb-1 flex items-center gap-2">
-                <KeyRound className="w-5 h-5" /> {hasPin ? 'Cambiar PIN' : 'Poner un PIN'}
-            </h3>
+        <div>
             <p className="text-xs text-muted-foreground mb-4">
                 Es el PIN que se pide al entrar desde un móvil nuevo (5 toques en el título de la portada).
             </p>

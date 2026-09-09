@@ -5,7 +5,9 @@ import { AnnouncementForm } from '@/components/AnnouncementForm';
 import { isAdmin } from '@/lib/admin-auth';
 import { Button } from '@/components/ui/button';
 import { logout } from '@/app/admin/actions';
-import { AdminControls } from '@/components/AdminControls';
+import { BulkUpload, DangerZone } from '@/components/AdminControls';
+import { AddMemberForm } from '@/components/AddMemberForm';
+import { SeccionAdmin } from '@/components/SeccionAdmin';
 import { PenaColorPicker } from '@/components/PenaColorPicker';
 import { Header } from '@/components/Header';
 import { ChangePinForm } from '@/components/ChangePinForm';
@@ -46,19 +48,32 @@ export default async function GestionPage() {
                     </div>
                 </div>
 
-                <div className="bg-background rounded-lg border shadow-sm p-4">
+                {/* Arriba lo que se usa: dar de alta y la lista. Los ajustes que
+                    casi nunca se tocan van plegados y al final. */}
+                <div className="space-y-4">
+                    <AddMemberForm />
+
+                    <SeccionAdmin titulo="Pegar la lista completa" pista="carga rápida">
+                        <BulkUpload />
+                    </SeccionAdmin>
+                </div>
+
+                <div className="bg-background rounded-lg border shadow-sm p-4 mt-6">
                     <MemberList initialMembers={members} isAdmin={true} />
                 </div>
 
-                <div className="mt-8">
-                    <PenaColorPicker current={penaColor} />
+                <div className="mt-8 space-y-3">
+                    <SeccionAdmin titulo="🎨 Color de la peña" pista="tiñe toda la web">
+                        <PenaColorPicker current={penaColor} />
+                    </SeccionAdmin>
+
+                    <SeccionAdmin titulo={hasPin ? '🔑 Cambiar PIN' : '🔑 Poner un PIN'} pista="acceso de admin">
+                        <ChangePinForm hasPin={hasPin} />
+                    </SeccionAdmin>
+
+                    <DangerZone />
                 </div>
 
-                <div className="mt-8">
-                    <ChangePinForm hasPin={hasPin} />
-                </div>
-
-                <AdminControls />
             </div>
         </main>
     );

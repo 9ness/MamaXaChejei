@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { setPenaColor } from '@/app/actions';
 import { PENA_PRESETS, type PenaColorKey } from '@/lib/pena-colors';
-import { Palette, Check } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function PenaColorPicker({ current }: { current: string }) {
@@ -18,10 +18,7 @@ export function PenaColorPicker({ current }: { current: string }) {
     };
 
     return (
-        <div className="bg-card rounded-lg border shadow-sm p-6">
-            <h3 className="text-lg font-semibold mb-1 flex items-center gap-2">
-                <Palette className="w-5 h-5" /> Color de la peña
-            </h3>
+        <div>
             <p className="text-xs text-muted-foreground mb-4">
                 Elige el color principal. Se aplica al momento en toda la web (menús, títulos, chat…).
             </p>
