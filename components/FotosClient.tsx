@@ -1,10 +1,13 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { upload } from '@vercel/blob/client';
-import { addFoto, getFotos, type Foto } from '@/app/actions';
+import { addFoto, getFotos, getMeusLikes, toggleLike, type Foto } from '@/app/actions';
+import { getAnonId } from '@/lib/anon-id';
+import { fotoId } from '@/lib/fotos';
 import { Button } from '@/components/ui/button';
-import { Camera, ImagePlus, Loader2, X } from 'lucide-react';
+import { Camera, Flame, ImagePlus, Loader2, X } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 
 // --- COMPRESIÓN EN EL MÓVIL ---
 // Las fotos salen del móvil a 3-6 MB. Subirlas tal cual llena el almacén y se
@@ -73,20 +76,104 @@ async function comprimir(file: File): Promise<File> {
     }
 }
 
-export function FotosClient({ initialFotos }: { initialFotos: Foto[] }) {
+export function FotosClient({
+    initialFotos,
+    initialLikes = {},
+}: {
+    initialFotos: Foto[];
+    initialLikes?: Record<string, number>;
+}) {
     const [fotos, setFotos] = useState<Foto[]>(initialFotos);
+    const [likes, setLikes] = useState<Record<string, number>>(initialLikes);
+    const [meus, setMeus] = useState<Set<string>>(new Set());
+    const [orde, setOrde] = useState<'data' | 'likes'>('data');
     const [busy, setBusy] = useState(false);
     const [progress, setProgress] = useState('');
     const [error, setError] = useState('');
-    const [lightbox, setLightbox] = useState<string | null>(null);
+    const [lightbox, setLightbox] = useState<Foto | null>(null);
+    // Lo elegido pero aún sin subir: así se puede ponerle un pie antes de que
+    // se vaya. Si no se escribe nada, se sube igual.
+    const [pendentes, setPendentes] = useState<File[]>([]);
+    const [previa, setPrevia] = useState<string | null>(null);
+    const [titulo, setTitulo] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
     // Dos inputs: el de la cámara lleva `capture`, que en el móvil abre la
     // cámara directamente en vez de la galería. No se puede tener uno solo:
     // con `capture` puesto, ya no deja elegir de la galería.
     const camaraRef = useRef<HTMLInputElement>(null);
 
-    const onFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    useEffect(() => {
+        // Qué fotos marcó ESTE móvil. El anonId solo existe en el navegador, así
+        // que no puede venir del render del servidor.
+        let vivo = true;
+        getMeusLikes(getAnonId())
+            .then((ids) => { if (vivo) setMeus(new Set(ids)); })
+            .catch(() => { /* se quedan todas apagadas y ya */ });
+        return () => { vivo = false; };
+    }, []);
+
+    const darLike = async (url: string) => {
+        const id = fotoId(url);
+        if (!id) return;
+
+        // Optimista: el 🔥 responde al momento y se corrige si el servidor dice
+        // otra cosa.
+        const tinao = meus.has(id);
+        setMeus((prev) => {
+            const s = new Set(prev);
+            if (tinao) s.delete(id); else s.add(id);
+            return s;
+        });
+        setLikes((prev) => ({ ...prev, [id]: Math.max(0, (prev[id] ?? 0) + (tinao ? -1 : 1)) }));
+
+        const res = await toggleLike(getAnonId(), id);
+        if (res.error) {
+            setMeus((prev) => {
+                const s = new Set(prev);
+                if (tinao) s.add(id); else s.delete(id);
+                return s;
+            });
+            setLikes((prev) => ({ ...prev, [id]: Math.max(0, (prev[id] ?? 0) + (tinao ? 1 : -1)) }));
+            return;
+        }
+        setLikes((prev) => ({ ...prev, [id]: res.likes ?? 0 }));
+    };
+
+    const listadas = orde === 'likes'
+        ? [...fotos].sort((a, b) => {
+            const da = likes[fotoId(a.url)] ?? 0;
+            const db = likes[fotoId(b.url)] ?? 0;
+            return db - da || b.ts - a.ts;
+        })
+        : fotos;
+
+    const limpiaInputs = () => {
+        // Se limpian los dos: si no, elegir la misma foto otra vez no dispara
+        // el onChange.
+        if (inputRef.current) inputRef.current.value = '';
+        if (camaraRef.current) camaraRef.current.value = '';
+    };
+
+    const onFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(e.target.files ?? []);
+        if (files.length === 0) return;
+        setError('');
+        setTitulo('');
+        setPendentes(files);
+        if (previa) URL.revokeObjectURL(previa);
+        setPrevia(URL.createObjectURL(files[0]));
+        limpiaInputs();
+    };
+
+    const cancelar = () => {
+        if (previa) URL.revokeObjectURL(previa);
+        setPrevia(null);
+        setPendentes([]);
+        setTitulo('');
+    };
+
+    const subir = async () => {
+        const files = pendentes;
         if (files.length === 0) return;
         setError('');
         setBusy(true);
@@ -103,7 +190,7 @@ export function FotosClient({ initialFotos }: { initialFotos: Foto[] }) {
                     access: 'public',
                     handleUploadUrl: '/api/fotos/upload',
                 });
-                await addFoto(blob.url);
+                await addFoto(blob.url, titulo);
                 done++;
             } catch (err) {
                 // El motivo técnico va á consola; á peña só lle interesa saber
@@ -124,10 +211,7 @@ export function FotosClient({ initialFotos }: { initialFotos: Foto[] }) {
         setFotos(frescas);
         setBusy(false);
         setProgress('');
-        // Se limpian los dos: si no, elegir la misma foto otra vez no dispara
-        // el onChange.
-        if (inputRef.current) inputRef.current.value = '';
-        if (camaraRef.current) camaraRef.current.value = '';
+        cancelar();
     };
 
     return (
@@ -166,6 +250,47 @@ export function FotosClient({ initialFotos }: { initialFotos: Foto[] }) {
                         Da galería
                     </Button>
                 </div>
+                {pendentes.length > 0 && (
+                    <div className="w-full max-w-sm rounded-xl border bg-card p-3 mt-2">
+                        <div className="flex gap-3">
+                            {previa && (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                    src={previa}
+                                    alt="A foto que vas subir"
+                                    className="w-20 h-20 rounded-lg object-cover border"
+                                />
+                            )}
+                            <div className="flex-1 min-w-0">
+                                <Input
+                                    value={titulo}
+                                    maxLength={80}
+                                    placeholder="Ponlle un pé (opcional)"
+                                    aria-label="Pé de foto"
+                                    disabled={busy}
+                                    onChange={(e) => setTitulo(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') subir(); }}
+                                />
+                                <p className="text-[11px] text-muted-foreground mt-1">
+                                    {pendentes.length > 1
+                                        ? `${pendentes.length} fotos · o pé vai en todas`
+                                        : 'Podes deixalo en branco.'}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-2 mt-3">
+                            <Button onClick={subir} disabled={busy} className="flex-1">
+                                {busy && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                                Subir
+                            </Button>
+                            <Button onClick={cancelar} disabled={busy} variant="outline">
+                                Cancelar
+                            </Button>
+                        </div>
+                    </div>
+                )}
+
                 {progress && <p className="text-xs text-muted-foreground">{progress}</p>}
                 {error && <p className="text-xs text-red-600 text-center max-w-sm">{error}</p>}
             </div>
@@ -176,32 +301,117 @@ export function FotosClient({ initialFotos }: { initialFotos: Foto[] }) {
                     <p>Aínda non hai fotos. Sé o primeiro en subir un recordo 📸</p>
                 </div>
             ) : (
-                <div className="columns-2 sm:columns-3 md:columns-4 gap-3 [&>*]:mb-3">
-                    {fotos.map((f, i) => (
-                        <button
-                            key={`${f.url}-${i}`}
-                            onClick={() => setLightbox(f.url)}
-                            className="block w-full overflow-hidden rounded-lg border shadow-sm break-inside-avoid hover:opacity-90 transition-opacity"
-                        >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={f.url} alt="Recordo da peña" loading="lazy" className="w-full h-auto" />
-                        </button>
-                    ))}
-                </div>
+                <>
+                    {/* Ordenar: por defecto as últimas, que é o que se mira na
+                        festa; o outro é para ver as que máis gustaron. */}
+                    {fotos.length > 1 && (
+                        <div className="flex justify-center gap-1.5">
+                            {([
+                                { v: 'data' as const, label: '🕒 Máis recentes' },
+                                { v: 'likes' as const, label: '🔥 Máis gustadas' },
+                            ]).map((op) => (
+                                <button
+                                    key={op.v}
+                                    type="button"
+                                    onClick={() => setOrde(op.v)}
+                                    className={`rounded-full px-3.5 py-1.5 text-xs font-bold border transition-colors ${
+                                        orde === op.v
+                                            ? 'bg-primary text-primary-foreground border-primary'
+                                            : 'bg-card text-muted-foreground hover:bg-muted'
+                                    }`}
+                                >
+                                    {op.label}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    <div className="columns-2 sm:columns-3 md:columns-4 gap-3 [&>*]:mb-3">
+                        {listadas.map((f, i) => {
+                            const id = fotoId(f.url);
+                            const n = likes[id] ?? 0;
+                            const meu = meus.has(id);
+
+                            return (
+                                <div
+                                    key={`${f.url}-${i}`}
+                                    className="overflow-hidden rounded-lg border shadow-sm bg-card break-inside-avoid"
+                                >
+                                    <button
+                                        onClick={() => setLightbox(f)}
+                                        className="block w-full hover:opacity-90 transition-opacity"
+                                    >
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                        <img
+                                            src={f.url}
+                                            alt={f.titulo || 'Recordo da peña'}
+                                            loading="lazy"
+                                            className="w-full h-auto"
+                                        />
+                                    </button>
+
+                                    <div className="flex items-start gap-2 px-2.5 py-2">
+                                        {f.titulo && (
+                                            <span className="flex-1 min-w-0 text-xs text-muted-foreground leading-snug">
+                                                {f.titulo}
+                                            </span>
+                                        )}
+                                        <button
+                                            type="button"
+                                            aria-pressed={meu}
+                                            aria-label={meu ? 'Quitar o teu 🔥' : 'Dar un 🔥'}
+                                            onClick={() => darLike(f.url)}
+                                            className={`ml-auto shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-bold transition-colors ${
+                                                meu
+                                                    ? 'bg-orange-100 text-orange-700'
+                                                    : 'text-muted-foreground hover:bg-muted'
+                                            }`}
+                                        >
+                                            <Flame className={`w-3.5 h-3.5 ${meu ? 'fill-current' : ''}`} />
+                                            {n > 0 && <span className="tabular-nums">{n}</span>}
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </>
             )}
 
             {lightbox && (
                 <div
                     onClick={() => setLightbox(null)}
-                    className="fixed inset-0 z-[80] bg-black/90 flex items-center justify-center p-4 animate-in fade-in"
+                    className="fixed inset-0 z-[80] bg-black/90 flex flex-col items-center justify-center p-4 animate-in fade-in"
                 >
                     <button className="absolute top-4 right-4 text-white/80 hover:text-white" onClick={() => setLightbox(null)}>
                         <X className="w-8 h-8" />
                     </button>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={lightbox} alt="Recordo" className="max-w-full max-h-full rounded-lg object-contain" />
+                    <img
+                        src={lightbox.url}
+                        alt={lightbox.titulo || 'Recordo'}
+                        className="max-w-full max-h-[85vh] rounded-lg object-contain"
+                    />
+                    {lightbox.titulo && (
+                        <p className="mt-3 text-sm text-white/85 text-center max-w-lg">{lightbox.titulo}</p>
+                    )}
+
+                    <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); darLike(lightbox.url); }}
+                        aria-label={meus.has(fotoId(lightbox.url)) ? 'Quitar o teu 🔥' : 'Dar un 🔥'}
+                        className={`mt-3 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold transition-colors ${
+                            meus.has(fotoId(lightbox.url))
+                                ? 'bg-orange-500 text-white'
+                                : 'bg-white/15 text-white hover:bg-white/25'
+                        }`}
+                    >
+                        <Flame className={`w-4 h-4 ${meus.has(fotoId(lightbox.url)) ? 'fill-current' : ''}`} />
+                        {likes[fotoId(lightbox.url)] ?? 0}
+                    </button>
                 </div>
             )}
+
         </div>
     );
 }

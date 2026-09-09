@@ -157,7 +157,9 @@ public/               # sprites del juego (man*.png, ~2 MB cada uno)
 | `fiesta:highscore` | STRING | `{name, score}` (escrito con Lua atómico) |
 | `fiesta:total_games` | STRING | contador INCR |
 | `fiesta:color` | STRING | key del preset de paleta |
-| `fiesta:fotos` | LIST | URLs del mural |
+| `fiesta:fotos` | LIST | fotos del mural (JSON `{url, ts, titulo?}`) |
+| `fiesta:fotos_likes` | HASH | fotoId → nº de 🔥 |
+| `fiesta:fotos_like_de:<anonId>` | SET | fotos que marcó ese móvil |
 | `fiesta:loc:<anonId>` | STRING + TTL | punto del mapa (15/30/60 min o directo) |
 | `fiesta:loc_ids` | SET | índice de puntos (se auto-limpia al leer caducados) |
 | `fiesta:boletos` | LIST | boletos de broma de la peña (JSON, LTRIM 0 199) |
@@ -306,10 +308,14 @@ store Blob). PENDIENTE: confirmar si conviene crear un `.env.example`.
     (`mapa_share`); el TTL de Redis es solo red de seguridad, la duración real
     la controla el cliente. Leaflet se importa dinámicamente en cliente — no lo
     metas en un RSC.
-11. **Fotos:** subida directa cliente → Vercel Blob. En local NO llega el
-    webhook `onUploadCompleted`, por eso el cliente llama además a `addFoto()`
-    con la URL final. Límite 4 MB y solo jpeg/png/webp (el cliente ya
-    comprime).
+11. **Fotos:** subida directa cliente → Vercel Blob (store `mamaxachejei-fotos`,
+    CDG1, público). En local NO llega el webhook `onUploadCompleted`, por eso el
+    cliente llama además a `addFoto()` con la URL final. Límite 4 MB y solo
+    jpeg/png/webp; el cliente comprime a WebP con objetivo de ~220 KB. Cada foto
+    puede llevar un pie opcional (`Foto.titulo`). Los 🔥 van aparte, en
+    `fiesta:fotos_likes` (contador) + `fiesta:fotos_like_de:<anonId>` (SET), y la
+    identidad de una foto es el nombre del fichero en Blob (`lib/fotos.ts`), no
+    un id propio: así funciona también con las fotos viejas.
 12. **`components.json` declara `tailwind.config: ""`** aunque existe
     `tailwind.config.js` (Tailwind **3.4**, no 4). Si añades componentes shadcn
     con la CLI, revisa que no te reescriba la config ni el `globals.css`.

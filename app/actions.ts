@@ -536,24 +536,105 @@ export async function setPenaColor(key: string) {
 // --- FOTOS / MURAL DE RECUERDOS ---
 
 const FOTOS_KEY = `${NAMESPACE}:fotos`;
+// Los 🔥 van en sus propias keys: la lista de fotos no se puede reescribir por
+// cada toque (mismo criterio que el estado de los boletos).
+const FOTOS_LIKES_KEY = `${NAMESPACE}:fotos_likes`;        // HASH fotoId -> nº
+const FOTOS_LIKES_DE = `${NAMESPACE}:fotos_like_de:`;      // SET por dispositivo
 
 export interface Foto {
     url: string;
     ts: number;
+    /** Pie de foto, opcional: quien sube decide si le pone algo o no. */
+    titulo?: string;
 }
 
-export async function addFoto(url: string) {
+export async function addFoto(url: string, titulo?: string) {
     if (!url || typeof url !== 'string' || !url.startsWith('http')) {
         return { success: false };
     }
     try {
-        const foto: Foto = { url: url.slice(0, 500), ts: Date.now() };
+        const pie = (titulo ?? '').replace(/\s+/g, ' ').trim().slice(0, 80);
+        const foto: Foto = {
+            url: url.slice(0, 500),
+            ts: Date.now(),
+            ...(pie ? { titulo: pie } : {}),
+        };
         await redis.lpush(FOTOS_KEY, JSON.stringify(foto));
         await redis.ltrim(FOTOS_KEY, 0, 299); // conserva las últimas 300
         revalidatePath('/recuerdos');
         return { success: true };
     } catch {
         return { success: false };
+    }
+}
+
+/** Cuántos 🔥 tiene cada foto. Una sola lectura para todo el mural. */
+export async function getLikes(): Promise<Record<string, number>> {
+    noStore();
+    try {
+        const raw = await redis.hgetall<Record<string, string | number>>(FOTOS_LIKES_KEY);
+        if (!raw) return {};
+        const salida: Record<string, number> = {};
+        for (const [id, v] of Object.entries(raw)) {
+            const n = Number(v) || 0;
+            if (n > 0) salida[id] = n;
+        }
+        return salida;
+    } catch {
+        return {};
+    }
+}
+
+/** A cuáles les ha dado 🔥 este móvil, para pintarlas encendidas. */
+export async function getMeusLikes(anonId: string): Promise<string[]> {
+    noStore();
+    const id = limpiaAnonId(anonId);
+    if (!id) return [];
+    try {
+        const ids = await redis.smembers(`${FOTOS_LIKES_DE}${id}`);
+        return (ids ?? []).map(String);
+    } catch {
+        return [];
+    }
+}
+
+/**
+ * Dar o quitar el 🔥. El SET del dispositivo es lo que decide: si el `sadd`
+ * dice que ya estaba, se quita. Así no hay forma de sumar dos veces desde el
+ * mismo móvil aunque se pulse rápido.
+ */
+export async function toggleLike(
+    anonId: string,
+    fotoId: string,
+): Promise<{ liked?: boolean; likes?: number; error?: string }> {
+    const id = limpiaAnonId(anonId);
+    if (!id) return { error: 'Non se puido identificar o dispositivo.' };
+    if (!/^[A-Za-z0-9._-]{1,120}$/.test(fotoId)) return { error: 'Foto non válida.' };
+
+    const ip = clientIpFromHeaders(await headers());
+    if (await rateLimited('like', ip, 600, 60 * 60)) {
+        return { error: 'Demasiados toques seguidos.' };
+    }
+
+    try {
+        const key = `${FOTOS_LIKES_DE}${id}`;
+        const engadido = await redis.sadd(key, fotoId);
+
+        let likes: number;
+        if (engadido) {
+            likes = await redis.hincrby(FOTOS_LIKES_KEY, fotoId, 1);
+        } else {
+            await redis.srem(key, fotoId);
+            likes = await redis.hincrby(FOTOS_LIKES_KEY, fotoId, -1);
+            if (likes < 0) {
+                await redis.hset(FOTOS_LIKES_KEY, { [fotoId]: 0 });
+                likes = 0;
+            }
+        }
+
+        return { liked: Boolean(engadido), likes };
+    } catch {
+        return { error: 'Non se puido gardar.' };
     }
 }
 

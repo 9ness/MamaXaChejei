@@ -1,11 +1,11 @@
 import { Header } from '@/components/Header';
 import { FotosClient } from '@/components/FotosClient';
-import { getFotos } from '@/app/actions';
+import { getFotos, getLikes } from '@/app/actions';
 
 export const dynamic = 'force-dynamic';
 
 export default async function RecuerdosPage() {
-    const fotos = await getFotos();
+    const [fotos, likes] = await Promise.all([getFotos(), getLikes()]);
 
     return (
         <main className="min-h-screen bg-gray-50/50 dark:bg-zinc-950">
@@ -21,7 +21,7 @@ export default async function RecuerdosPage() {
                     </p>
                 </div>
 
-                <FotosClient initialFotos={fotos} />
+                <FotosClient initialFotos={fotos} initialLikes={likes} />
             </div>
         </main>
     );
