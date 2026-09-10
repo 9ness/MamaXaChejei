@@ -38,6 +38,9 @@ export const ITINERARIO: ItinerarioDia[] = [
         eventos: [
             { hora: '10:00', titulo: 'Alborada', grupo: 'Banda de Música de Santa Cruz de Ribadulla', icono: '🎺' },
             { hora: '10:00', titulo: 'Alborada pola parroquia', grupo: 'Trécola', icono: '🎺' },
+            // Non vén no programa oficial: anunciouno o Concello despois de
+            // imprimilo (publicación do alcalde do 10 de setembro).
+            { hora: '12:00', titulo: 'Medalla de Ouro de Rianxo a «Moncho o Xixí»', grupo: 'Sesión extraordinaria do Pleno da Corporación', lugar: 'Salón de Plenos do Concello', nota: 'A Ramón Iglesias Sánchez, corenta anos xuntando ao pobo. Del naceu cantar a Rianxeira á luz das bengalas.', icono: '🏅' },
             { hora: '13:00', titulo: 'Concerto', grupo: 'Banda de Música de Santa Cruz de Ribadulla', lugar: 'Praza da Igrexa', icono: '🎺' },
             { hora: '14:00', titulo: 'Sesión vermú coa orquestra', grupo: 'Platinum', icono: '🍻' },
             { hora: '18:00', titulo: 'Concerto', grupo: 'Banda de Música de Santa Cruz de Ribadulla', lugar: 'Praza da Igrexa', nota: 'Programa ALICERCE da Rede Cultural da Deputación da Coruña', icono: '🎺' },
