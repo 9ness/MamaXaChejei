@@ -484,19 +484,6 @@ export async function saveHighScore(name: string, score: number) {
         return { success: false };
     }
 }
-/** Poñer o récord do xogo a cero. Só admin: págase con orgullo, non con moedas. */
-export async function resetHighScore(): Promise<{ success?: true; error?: string }> {
-    if (!(await isAdminRequest())) return { error: 'No autorizado' };
-    try {
-        await redis.del(HIGHSCORE_KEY);   // o vello, por se aínda anda por aí
-        await redis.del(XOGO_TOP_KEY);
-        revalidatePath('/');
-        return { success: true };
-    } catch {
-        return { error: 'Non se puido reiniciar o récord.' };
-    }
-}
-
 const TOTAL_GAMES_KEY = 'fiesta:total_games';
 
 export async function getTotalGames(): Promise<number> {
