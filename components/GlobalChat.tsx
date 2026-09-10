@@ -110,8 +110,15 @@ export function GlobalChat() {
 
         if (isOpen) {
             load();
-            const interval = setInterval(load, 5000);
-            return () => clearInterval(interval);
+            // Con la pestaña escondida no se consulta: el chat mira cada 5 s y
+            // era lo que más gastaba de toda la app estando abierto.
+            const tick = () => { if (document.visibilityState === 'visible') load(); };
+            const interval = setInterval(tick, 5000);
+            document.addEventListener('visibilitychange', tick);
+            return () => {
+                clearInterval(interval);
+                document.removeEventListener('visibilitychange', tick);
+            };
         }
     }, [isOpen]);
 

@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { MapPin, Radio, Loader2, Users, Check, Share2, LocateFixed } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { shareLocation, getLocations, removeLocation } from '@/app/actions';
-import { pedirRefresco } from '@/lib/avisos';
+import { pedirRefresco, publicarAvisos, lerAvisos } from '@/lib/avisos';
 
 // 📍 Recinto da festa: Praza de Castelao (Rianxo). Centro del mapa.
 // Ancla fiable: Concello de Rianxo = 42.65190, -8.81830 (dirección: Praza Castelao).
@@ -69,7 +69,9 @@ const DURACIONES = [
 
 const COLORES = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#a855f7', '#ec4899'];
 
-const LIVE_THROTTLE_MS = 4000; // en directo: refresca el punto cada ~4s
+// En directo cada 8 s y no cada 4: son dos comandos de Redis por escritura y se
+// paga por comando. A pie, en 8 s te mueves 10 metros; en el mapa no se nota.
+const LIVE_THROTTLE_MS = 8000;
 const LIVE_WRITE_TTL = 60;     // segundos que sobrevive el punto sin actualizarse (red de seguridad)
 
 // Sesión de compartido persistida: sobrevive a recargas de página.
@@ -131,6 +133,7 @@ export function MapaClient() {
     const targetRef = useRef<L.Marker | null>(null);
     const targetPos = useRef<{ lat: number; lng: number } | null>(null);
     const watchId = useRef<number | null>(null);
+    const xaEnDirecto = useRef(false);
     const lastShare = useRef<number>(0);
     const lastPos = useRef<{ lat: number; lng: number } | null>(null);
 
@@ -195,6 +198,9 @@ export function MapaClient() {
         const layer = layerRef.current;
         if (!Lm || !map || !layer) return;
         const points = await getLocations();
+        // El menú no necesita preguntar por su cuenta mientras estás en el mapa:
+        // se lo decimos nosotros, que acabamos de mirarlo.
+        publicarAvisos({ ...lerAvisos(), ubicacions: points.length });
         layer.clearLayers();
         points.forEach(p => {
             const dotColor = p.color || '#3b82f6';
@@ -269,10 +275,15 @@ export function MapaClient() {
             await refreshPoints();
         })();
 
-        const interval = setInterval(refreshPoints, 15000);
+        // Con la pestaña en segundo plano no se consulta nada: si nadie mira,
+        // no se gasta.
+        const tick = () => { if (document.visibilityState === 'visible') refreshPoints(); };
+        const interval = setInterval(tick, 15000);
+        document.addEventListener('visibilitychange', tick);
         return () => {
             cancelled = true;
             clearInterval(interval);
+            document.removeEventListener('visibilitychange', tick);
             if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current);
             mapObj.current?.remove();
             mapObj.current = null;
@@ -289,7 +300,14 @@ export function MapaClient() {
         await shareLocation(id, lat, lng, nombre, color, ttl, opts.live);
         pedirRefresco(); // que a insignia do menú se entere xa
         if (opts.recenter && mapObj.current) mapObj.current.setView([lat, lng], 17);
-        await refreshPoints();
+
+        // En directo NO se releen los puntos en cada latido: sería doblar el
+        // gasto para ver lo mismo. Ya los relee el refresco de 15 s. Solo la
+        // primera vez, para que tu punto aparezca al momento.
+        if (!opts.live || !xaEnDirecto.current) {
+            xaEnDirecto.current = Boolean(opts.live);
+            await refreshPoints();
+        }
     }, [refreshPoints]);
 
     const stopLive = useCallback((msg?: string) => {
@@ -297,6 +315,7 @@ export function MapaClient() {
             navigator.geolocation.clearWatch(watchId.current);
             watchId.current = null;
         }
+        xaEnDirecto.current = false;   // ao volver a empezar, refresco inmediato
         setLive(false);
         setShareUntil(null);
         clearSession();

@@ -26,9 +26,14 @@ const BASE_ITEMS: NavItem[] = [
 
 const ADMIN_ITEM: NavItem = { href: '/gestion', label: 'Gestión', icon: ShieldCheck };
 
-/** Cada cuánto se pregunta. 45 s: en la fiesta nadie mira el móvil más seguido,
- *  y son 3 comandos de Redis por vuelta y por persona. */
-const CADA = 45_000;
+/**
+ * Cada cuánto se pregunta cuando NO estás en el mapa. Dos minutos: son dos
+ * comandos de Redis por vuelta y se paga por comando, y para enterarte de que
+ * hay gente compartiendo o fotos nuevas no hace falta más fino.
+ * En el mapa no se pregunta nada desde aquí: el propio mapa, que ya está
+ * mirando, publica cuántos hay.
+ */
+const CADA = 120_000;
 
 /** El circulito rojo. Más de 9 se queda en "9+", como en todas partes. */
 function Insignia({ n }: { n: number }) {
@@ -63,6 +68,7 @@ export function BottomNav({ isAdmin = false }: { isAdmin?: boolean }) {
 
         const mirar = async () => {
             if (document.visibilityState !== 'visible') return;
+            if (window.location.pathname.startsWith('/mapa')) return;
             const a = await getAvisos();
             if (!vivo) return;
             setAvisos(a);

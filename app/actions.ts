@@ -746,13 +746,13 @@ export async function toggleLike(
 export async function getAvisos(): Promise<{ ubicacions: number; chatN: number; fotosN: number }> {
     noStore();
     try {
-        const [puntos, contadores] = await Promise.all([
-            getLocations(),
+        const [cantos, contadores] = await Promise.all([
+            redis.zcount(LOC_Z, Date.now(), '+inf'),
             redis.mget<(string | number | null)[]>(CHAT_N_KEY, FOTOS_N_KEY),
         ]);
 
         return {
-            ubicacions: puntos.length,
+            ubicacions: Number(cantos) || 0,
             chatN: Number(contadores?.[0]) || 0,
             fotosN: Number(contadores?.[1]) || 0,
         };
@@ -782,7 +782,10 @@ export async function getFotos(): Promise<Foto[]> {
 // --- UBICACIONES ANÓNIMAS (MAPA) ---
 
 const LOC_PREFIX = `${NAMESPACE}:loc:`;
-const LOC_INDEX = `${NAMESPACE}:loc_ids`;
+// Índice como ZSET puntuado pola CADUCIDADE (epoch ms). Así contar cuántos
+// comparten agora é UN comando (zcount) e listalos son DOUS (zrange + mget),
+// haxa unha persoa ou vinte. Antes era un GET por persoa, e págase por comando.
+const LOC_Z = `${NAMESPACE}:loc_z`;
 
 // TTL del punto en Redis. Puntual: 15/30/60 min. Directo: valor corto (red de
 // seguridad si el cliente muere; la duración real la controla el cliente).
@@ -836,7 +839,7 @@ export async function shareLocation(
         if (live) payload.live = true;
 
         await redis.set(`${LOC_PREFIX}${id}`, JSON.stringify(payload), { ex: ttl });
-        await redis.sadd(LOC_INDEX, id);
+        await redis.zadd(LOC_Z, { score: Date.now() + ttl * 1000, member: id });
         return { success: true };
     } catch {
         return { success: false };
@@ -847,7 +850,10 @@ export async function removeLocation(anonId: string) {
     try {
         const id = anonId.slice(0, 40);
         await redis.del(`${LOC_PREFIX}${id}`);
-        await redis.srem(LOC_INDEX, id);
+        await redis.zrem(LOC_Z, id);
+        // De paso, tirar os caducados: quitar o punto é raro, e nas lecturas
+        // (que van a cada rato) así non hai que limpar nada.
+        await redis.zremrangebyscore(LOC_Z, 0, Date.now());
         return { success: true };
     } catch {
         return { success: false };
@@ -858,30 +864,27 @@ export async function removeLocation(anonId: string) {
 export async function getLocations(): Promise<MapPoint[]> {
     noStore();
     try {
-        const ids = (await redis.smembers(LOC_INDEX)) as string[];
+        // Dous comandos e punto: os ids que aínda non caducaron, e os seus
+        // puntos dunha soa vez.
+        const ids = (await redis.zrange(LOC_Z, Date.now(), '+inf', { byScore: true })) as string[];
         if (!ids || ids.length === 0) return [];
 
-        const pipeline = redis.pipeline();
-        ids.forEach(id => pipeline.get(`${LOC_PREFIX}${id}`));
-        const results = await pipeline.exec<(AnonLocation | string | null)[]>();
+        const raws = await redis.mget<(AnonLocation | string | null)[]>(
+            ...ids.map((id) => `${LOC_PREFIX}${id}`),
+        );
 
         const points: MapPoint[] = [];
-        const expired: string[] = [];
-
-        results.forEach((raw, i) => {
-            if (raw == null) {
-                expired.push(ids[i]); // caducado → limpiar del índice
-                return;
-            }
-            const loc = typeof raw === 'string' ? (JSON.parse(raw) as AnonLocation) : (raw as AnonLocation);
-            if (loc && typeof loc.lat === 'number' && typeof loc.lng === 'number') {
-                points.push({ lat: loc.lat, lng: loc.lng, ts: loc.ts, name: loc.name, color: loc.color, live: loc.live });
+        (raws ?? []).forEach((raw) => {
+            if (raw == null) return;   // caducou entre o índice e a lectura
+            try {
+                const loc = typeof raw === 'string' ? (JSON.parse(raw) as AnonLocation) : (raw as AnonLocation);
+                if (loc && typeof loc.lat === 'number' && typeof loc.lng === 'number') {
+                    points.push({ lat: loc.lat, lng: loc.lng, ts: loc.ts, name: loc.name, color: loc.color, live: loc.live });
+                }
+            } catch {
+                // un punto corrupto non pode tirar o mapa enteiro
             }
         });
-
-        if (expired.length > 0) {
-            await redis.srem(LOC_INDEX, ...expired);
-        }
 
         return points;
     } catch {
