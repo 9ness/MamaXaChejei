@@ -148,6 +148,10 @@ export async function DELETE(request: Request) {
             await redis.rpush(CHAT_KEY, ...stringified);
         }
 
+        // El contador sube con CUALQUIER cambio (no solo mensajes nuevos): es
+        // lo que mira el chat para saber si tiene que recargar la lista.
+        await redis.incr('fiesta:chat_n');
+
         // Also check if it was pinned
         const pinnedRaw = await redis.get(PINNED_CHAT_KEY);
         if (pinnedRaw) {
@@ -172,12 +176,14 @@ export async function PATCH(request: Request) {
             if (!(await isAdminRequest())) return unauthorized();
             if (!payload) return NextResponse.json({ error: 'Missing payload for pin' }, { status: 400 });
             await redis.set(PINNED_CHAT_KEY, JSON.stringify(payload));
+            await redis.incr('fiesta:chat_n');
             return NextResponse.json({ success: true });
         }
 
         if (action === 'unpin') {
             if (!(await isAdminRequest())) return unauthorized();
             await redis.del(PINNED_CHAT_KEY);
+            await redis.incr('fiesta:chat_n');
             return NextResponse.json({ success: true });
         }
 
@@ -203,6 +209,7 @@ export async function PATCH(request: Request) {
                     const stringified = msgs.map((m: any) => JSON.stringify(m));
                     await redis.rpush(CHAT_KEY, ...stringified);
                 }
+                await redis.incr('fiesta:chat_n');
             }
             return NextResponse.json({ success: true });
         }

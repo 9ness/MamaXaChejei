@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { usePathname } from 'next/navigation';
 import { BeerGame } from '@/components/BeerGame';
-import { HighScore, getHighScore, getTotalGames } from '@/app/actions';
+import { HighScore, getHighScore, getRankingXogo, getTotalGames } from '@/app/actions';
 import { lerAvisos, lerAvisosNoServidor, lerVisto, marcarVisto, subscribirAvisos } from '@/lib/avisos';
 
 interface ChatMessage {
@@ -30,6 +30,7 @@ export function GlobalChat() {
     const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
     const [showGame, setShowGame] = useState(false);
     const [respondendo, setRespondendo] = useState<ChatMessage | null>(null);
+    const [ranking, setRanking] = useState<HighScore[] | null>(null);
 
     // El contador de mensajes lo trae BottomNav (una sola consulta para toda la
     // app); aquí solo se lee para pintar la insignia del botón flotante.
@@ -49,18 +50,13 @@ export function GlobalChat() {
     const [headerHighScore, setHeaderHighScore] = useState<HighScore | null>(null);
     const [totalGames, setTotalGames] = useState(0);
 
-    // Fetch HighScore & TotalGames on open and poll
+    // El récord y las partidas se piden AL ABRIR (y al cerrar el juego), no cada
+    // 10 segundos: eran dos comandos de Redis por vuelta para un número que solo
+    // cambia cuando alguien juega.
     useEffect(() => {
-        if (isOpen) {
-            const fetchData = () => {
-                getHighScore().then(setHeaderHighScore);
-                getTotalGames().then(setTotalGames);
-            };
-
-            fetchData();
-            const interval = setInterval(fetchData, 10000); // 10s polling
-            return () => clearInterval(interval);
-        }
+        if (!isOpen) return;
+        getHighScore().then(setHeaderHighScore);
+        getTotalGames().then(setTotalGames);
     }, [isOpen]);
 
     const pathname = usePathname();
@@ -94,32 +90,57 @@ export function GlobalChat() {
     const scrollRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const isUserScrolledUp = useRef(false);
+    /** Por dónde iba el contador de cambios del chat la última vez que se miró. */
+    const versionRef = useRef(-1);
 
-    // Initial load and polling
+    // Carga inicial y vigilancia barata.
+    //
+    // Antes se traía la lista entera cada 5 segundos (dos comandos de Redis por
+    // vuelta, hubiera novedades o no). Ahora mira un contador que sube con
+    // cualquier cambio —mensaje, borrado, chincheta o reacción— y solo se baja
+    // la lista cuando ese número se mueve. Con el chat abierto y nadie
+    // escribiendo, que es lo normal, se queda en un comando por vuelta.
     useEffect(() => {
+        if (!isOpen) return;
+
         const load = async () => {
             try {
                 const res = await fetch('/api/chat', { cache: 'no-store', next: { revalidate: 0 } });
                 const data = await res.json();
                 if (data.messages) setMessages(data.messages.reverse());
-                if (data.pinnedMessage) setPinnedMessage(data.pinnedMessage);
+                setPinnedMessage(data.pinnedMessage ?? null);
             } catch {
                 // silent
             }
         };
 
-        if (isOpen) {
-            load();
-            // Con la pestaña escondida no se consulta: el chat mira cada 5 s y
-            // era lo que más gastaba de toda la app estando abierto.
-            const tick = () => { if (document.visibilityState === 'visible') load(); };
-            const interval = setInterval(tick, 5000);
-            document.addEventListener('visibilitychange', tick);
-            return () => {
-                clearInterval(interval);
-                document.removeEventListener('visibilitychange', tick);
-            };
-        }
+        const versionAgora = async () => {
+            try {
+                const res = await fetch('/api/chat/n', { cache: 'no-store' });
+                const data = await res.json();
+                return Number(data?.n) || 0;
+            } catch {
+                return versionRef.current;
+            }
+        };
+
+        const mirar = async () => {
+            if (document.visibilityState !== 'visible') return;
+            const n = await versionAgora();
+            if (n === versionRef.current) return;
+            versionRef.current = n;
+            await load();
+        };
+
+        // Al abrir siempre se carga, y se toma nota de por dónde va el contador.
+        load().then(async () => { versionRef.current = await versionAgora(); });
+
+        const interval = setInterval(mirar, 5000);
+        document.addEventListener('visibilitychange', mirar);
+        return () => {
+            clearInterval(interval);
+            document.removeEventListener('visibilitychange', mirar);
+        };
     }, [isOpen]);
 
     // Local Storage Name
@@ -297,10 +318,65 @@ export function GlobalChat() {
                         >
                             <span className="text-base leading-none">🎮</span> Xoga
                         </button>
+                        <button
+                            onClick={() => { setRanking([]); getRankingXogo(5).then(setRanking); }}
+                            className="flex items-center justify-center h-8 w-8 rounded-full hover:bg-white/20 transition-colors text-white"
+                            title="Ranking do xogo"
+                        >
+                            <span className="text-base leading-none">🏆</span>
+                        </button>
                         <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)} className="hover:bg-white/10 rounded-full h-8 w-8 text-white">
                             <X className="h-5 w-5" />
                         </Button>
                     </div>
+
+                    {/* Ranking del juego: se pide al abrirlo, un solo comando. */}
+                    {ranking !== null && (
+                        <div
+                            onClick={() => setRanking(null)}
+                            className="absolute inset-0 z-40 bg-black/60 flex items-center justify-center p-4 animate-in fade-in"
+                        >
+                            <div
+                                onClick={(e) => e.stopPropagation()}
+                                className="w-full max-w-[300px] bg-white rounded-2xl shadow-2xl overflow-hidden"
+                            >
+                                <div className="px-4 py-3 bg-gradient-to-r from-amber-400 to-orange-500 text-white">
+                                    <p className="font-bold text-sm flex items-center gap-2">
+                                        🏆 Os mellores das cervexas
+                                    </p>
+                                </div>
+
+                                {ranking.length === 0 ? (
+                                    <p className="text-sm text-slate-500 text-center py-8 px-4">
+                                        Aínda non xogou ninguén. Sé o primeiro. 🍻
+                                    </p>
+                                ) : (
+                                    <ol className="divide-y">
+                                        {ranking.map((r, i) => (
+                                            <li key={`${r.name}-${i}`} className="flex items-center gap-3 px-4 py-2.5">
+                                                <span className="w-6 text-center text-lg leading-none">
+                                                    {['🥇', '🥈', '🥉'][i] ?? (
+                                                        <span className="text-xs font-bold text-slate-400">{i + 1}º</span>
+                                                    )}
+                                                </span>
+                                                <span className="flex-1 min-w-0 truncate text-sm font-medium text-slate-800">
+                                                    {r.name}
+                                                </span>
+                                                <span className="font-bold tabular-nums text-indigo-600">{r.score}</span>
+                                            </li>
+                                        ))}
+                                    </ol>
+                                )}
+
+                                <button
+                                    onClick={() => setRanking(null)}
+                                    className="w-full py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-50 border-t"
+                                >
+                                    Pechar
+                                </button>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Game Overlay */}
                     {showGame && (

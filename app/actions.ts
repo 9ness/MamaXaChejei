@@ -429,7 +429,10 @@ export async function getChatMessages(): Promise<ChatMessage[]> {
 
 // --- BEER GAME ACTIONS ---
 
-const HIGHSCORE_KEY = 'fiesta:highscore';
+const HIGHSCORE_KEY = 'fiesta:highscore';   // (vello) STRING co récord
+// Ranking do xogo: ZSET nome -> puntuación. Cun só comando sácase o récord
+// (o primeiro) ou o top 5, e gárdase con GT: só sobe se melloras a túa marca.
+const XOGO_TOP_KEY = 'fiesta:xogo_top';
 
 export interface HighScore {
     name: string;
@@ -439,48 +442,43 @@ export interface HighScore {
 export async function getHighScore(): Promise<HighScore | null> {
     noStore();
     try {
-        const data = await redis.get(HIGHSCORE_KEY);
-        if (!data) return null;
-        return typeof data === 'object' ? data as HighScore : JSON.parse(data as string);
+        const top = (await redis.zrange(XOGO_TOP_KEY, 0, 0, { rev: true, withScores: true })) as (string | number)[];
+        if (!top || top.length < 2) return null;
+        return { name: String(top[0]), score: Number(top[1]) || 0 };
     } catch {
         return null;
     }
 }
 
-export async function saveHighScore(name: string, score: number) {
+/** O top do xogo, cun só comando. Empatados, mándaos Redis por orde alfabética. */
+export async function getRankingXogo(limit = 5): Promise<HighScore[]> {
+    noStore();
     try {
-        // Atomic Lua script to prevent race conditions
-        // logic: fetch current -> decode -> compare -> set if higher
-        const script = `
-            local key = KEYS[1]
-            local newScore = tonumber(ARGV[1])
-            local newName = ARGV[2]
-
-            local currentData = redis.call('get', key)
-            local currentScore = 0
-
-            if currentData then
-                local decoded = cjson.decode(currentData)
-                currentScore = tonumber(decoded.score) or 0
-            end
-
-            if newScore > currentScore then
-                local newData = cjson.encode({name = newName, score = newScore})
-                redis.call('set', key, newData)
-                return 1
-            else
-                return 0
-            end
-        `;
-
-        const result = await redis.eval(script, [HIGHSCORE_KEY], [score, name.slice(0, 20)]);
-        const isNewRecord = result === 1;
-
-        if (isNewRecord) {
-            revalidatePath('/');
+        const plano = (await redis.zrange(XOGO_TOP_KEY, 0, limit - 1, { rev: true, withScores: true })) as (string | number)[];
+        const saida: HighScore[] = [];
+        for (let i = 0; i < (plano?.length ?? 0); i += 2) {
+            saida.push({ name: String(plano[i]), score: Number(plano[i + 1]) || 0 });
         }
+        return saida;
+    } catch {
+        return [];
+    }
+}
 
-        return { success: true, newRecord: isNewRecord };
+export async function saveHighScore(name: string, score: number) {
+    const puntos = Math.floor(Number(score));
+    const quen = String(name ?? '').trim().slice(0, 20) || 'Anónimo';
+    if (!Number.isFinite(puntos) || puntos <= 0) return { success: false };
+
+    try {
+        // `gt: true` deixa a mellor marca de cada quen sen ter que lela antes.
+        await redis.zadd(XOGO_TOP_KEY, { gt: true }, { score: puntos, member: quen });
+
+        const top = await getHighScore();
+        const newRecord = Boolean(top && top.name === quen && top.score === puntos);
+        if (newRecord) revalidatePath('/');
+
+        return { success: true, newRecord };
     } catch (e) {
         console.error('Error saving high score:', e);
         return { success: false };
@@ -490,7 +488,8 @@ export async function saveHighScore(name: string, score: number) {
 export async function resetHighScore(): Promise<{ success?: true; error?: string }> {
     if (!(await isAdminRequest())) return { error: 'No autorizado' };
     try {
-        await redis.del(HIGHSCORE_KEY);
+        await redis.del(HIGHSCORE_KEY);   // o vello, por se aínda anda por aí
+        await redis.del(XOGO_TOP_KEY);
         revalidatePath('/');
         return { success: true };
     } catch {

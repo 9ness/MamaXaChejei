@@ -134,6 +134,8 @@ export function MapaClient() {
     const targetPos = useRef<{ lat: number; lng: number } | null>(null);
     const watchId = useRef<number | null>(null);
     const xaEnDirecto = useRef(false);
+    const ultimoConteo = useRef(0);
+    const compartindo = useRef(false);
     const lastShare = useRef<number>(0);
     const lastPos = useRef<{ lat: number; lng: number } | null>(null);
 
@@ -198,6 +200,7 @@ export function MapaClient() {
         const layer = layerRef.current;
         if (!Lm || !map || !layer) return;
         const points = await getLocations();
+        ultimoConteo.current = points.length;
         // El menú no necesita preguntar por su cuenta mientras estás en el mapa:
         // se lo decimos nosotros, que acabamos de mirarlo.
         publicarAvisos({ ...lerAvisos(), ubicacions: points.length });
@@ -276,8 +279,15 @@ export function MapaClient() {
         })();
 
         // Con la pestaña en segundo plano no se consulta nada: si nadie mira,
-        // no se gasta.
-        const tick = () => { if (document.visibilityState === 'visible') refreshPoints(); };
+        // no se gasta. Y si el mapa está vacío y tú tampoco compartes, se mira
+        // la mitad de veces: no hay nada que se mueva.
+        let vez = 0;
+        const tick = () => {
+            if (document.visibilityState !== 'visible') return;
+            vez++;
+            if (ultimoConteo.current === 0 && !compartindo.current && vez % 2 === 1) return;
+            refreshPoints();
+        };
         const interval = setInterval(tick, 15000);
         document.addEventListener('visibilitychange', tick);
         return () => {
@@ -297,6 +307,7 @@ export function MapaClient() {
         // el puntual usa el TTL completo (15/30/60 min).
         const ttl = opts.live ? LIVE_WRITE_TTL : durSecs;
         lastPos.current = { lat, lng };
+        compartindo.current = true;
         await shareLocation(id, lat, lng, nombre, color, ttl, opts.live);
         pedirRefresco(); // que a insignia do menú se entere xa
         if (opts.recenter && mapObj.current) mapObj.current.setView([lat, lng], 17);
@@ -316,6 +327,7 @@ export function MapaClient() {
             watchId.current = null;
         }
         xaEnDirecto.current = false;   // ao volver a empezar, refresco inmediato
+        compartindo.current = false;
         setLive(false);
         setShareUntil(null);
         clearSession();
