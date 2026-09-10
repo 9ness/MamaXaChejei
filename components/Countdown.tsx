@@ -12,9 +12,9 @@ interface TimeLeft {
 }
 
 export function Countdown() {
-    // Primeiro evento do programa oficial 2026: o venres 11 ás 22:00 (Noite
-    // Retro). Se cambia o cartel, hai que tocar isto E lib/itinerario.ts.
-    const targetDate = new Date('2026-09-11T22:00:00');
+    // O Chupitaso: as doce da noite do venres 11 ao sábado 12. Se cambia o
+    // cartel, hai que tocar isto E lib/itinerario.ts.
+    const targetDate = new Date('2026-09-12T00:00:00');
     const [timeLeft, setTimeLeft] = useState<TimeLeft>({ months: 0, weeks: 0, days: 0, hours: 0, minutes: 0, seconds: 0 });
     const [mounted, setMounted] = useState(false);
 

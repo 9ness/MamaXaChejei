@@ -43,13 +43,16 @@ export function Itinerario() {
     const dayEnd = times[times.length - 1];
     const esHoxe = now >= dayStart - 6 * 3600_000 && now <= dayEnd + 3 * 3600_000;
 
+    // Ojo con los actos a la misma hora (el sábado hay tres a las 20:00): se
+    // compara por HORA y no por posición en la lista, que si no solo el último
+    // de la tanda salía en curso y los otros dos aparecían como pasados.
     const estadoDe = (i: number): EstadoEvento => {
         if (!esHoxe) return now > dayEnd ? 'pasado' : 'futuro';
         if (nextIdx === -1) return 'pasado';           // día terminado
-        if (i < nextIdx - 1) return 'pasado';
-        if (i === nextIdx - 1) return 'agora';         // evento en curso
-        if (i === nextIdx) return 'proximo';
-        return 'futuro';
+
+        const t = times[i];
+        if (t > now) return t === times[nextIdx] ? 'proximo' : 'futuro';
+        return t === times[nextIdx - 1] ? 'agora' : 'pasado';
     };
 
     return (
