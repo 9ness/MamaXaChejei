@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef, useOptimistic, startTransition } from 'react';
+import { useState, useEffect, useRef, useOptimistic, startTransition, useSyncExternalStore } from 'react';
 import { MessageCircle, X, Send, Trash2, Pin, ArrowDown, Reply } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { usePathname } from 'next/navigation';
 import { BeerGame } from '@/components/BeerGame';
 import { HighScore, getHighScore, getTotalGames } from '@/app/actions';
+import { lerAvisos, lerAvisosNoServidor, lerVisto, marcarVisto, subscribirAvisos } from '@/lib/avisos';
 
 interface ChatMessage {
     id: string;
@@ -29,6 +30,22 @@ export function GlobalChat() {
     const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
     const [showGame, setShowGame] = useState(false);
     const [respondendo, setRespondendo] = useState<ChatMessage | null>(null);
+
+    // El contador de mensajes lo trae BottomNav (una sola consulta para toda la
+    // app); aquí solo se lee para pintar la insignia del botón flotante.
+    const avisos = useSyncExternalStore(subscribirAvisos, lerAvisos, lerAvisosNoServidor);
+    const vistoChat = useSyncExternalStore(subscribirAvisos, () => lerVisto('chat'), () => null);
+
+    useEffect(() => {
+        if (avisos.chatN <= 0) return;
+        // Con el chat abierto lo estás viendo. Y la primera vez se toma nota sin
+        // enseñar nada, que si no saldrían todos los mensajes de la historia.
+        if (isOpen || vistoChat === null) marcarVisto('chat', avisos.chatN);
+    }, [isOpen, vistoChat, avisos.chatN]);
+
+    const senLer = isOpen || vistoChat === null
+        ? 0
+        : Math.max(0, avisos.chatN - vistoChat);
     const [headerHighScore, setHeaderHighScore] = useState<HighScore | null>(null);
     const [totalGames, setTotalGames] = useState(0);
 
@@ -223,12 +240,20 @@ export function GlobalChat() {
     return (
         <>
             {!isOpen && (
-                <Button
-                    onClick={() => setIsOpen(true)}
-                    className="fixed bottom-20 right-4 md:bottom-6 md:right-6 h-12 w-12 rounded-full shadow-xl bg-primary hover:scale-105 transition-all z-50 animate-in zoom-in opacity-80 hover:opacity-100"
-                >
-                    <MessageCircle className="h-6 w-6 text-white" />
-                </Button>
+                <div className="fixed bottom-20 right-4 md:bottom-6 md:right-6 z-50">
+                    <Button
+                        onClick={() => setIsOpen(true)}
+                        className="relative h-12 w-12 rounded-full shadow-xl bg-primary hover:scale-105 transition-all animate-in zoom-in opacity-80 hover:opacity-100"
+                    >
+                        <MessageCircle className="h-6 w-6 text-white" />
+                    </Button>
+
+                    {senLer > 0 && (
+                        <span className="pointer-events-none absolute -top-1 -right-1 min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-bold grid place-items-center shadow-md ring-2 ring-white">
+                            {senLer > 9 ? '9+' : senLer}
+                        </span>
+                    )}
+                </div>
             )}
 
             {isOpen && (

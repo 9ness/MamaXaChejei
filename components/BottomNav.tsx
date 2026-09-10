@@ -1,9 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { usePathname } from 'next/navigation';
 import { Home, List, MapPin, Images, Ticket, ShieldCheck, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getAvisos } from '@/app/actions';
+import { AVISOS_VACIOS, lerVisto, marcarVisto, publicarAvisos, subscribirAvisos, type Avisos } from '@/lib/avisos';
 
 interface NavItem {
     href: string;
@@ -23,9 +26,77 @@ const BASE_ITEMS: NavItem[] = [
 
 const ADMIN_ITEM: NavItem = { href: '/gestion', label: 'Gestión', icon: ShieldCheck };
 
+/** Cada cuánto se pregunta. 45 s: en la fiesta nadie mira el móvil más seguido,
+ *  y son 3 comandos de Redis por vuelta y por persona. */
+const CADA = 45_000;
+
+/** El circulito rojo. Más de 9 se queda en "9+", como en todas partes. */
+function Insignia({ n }: { n: number }) {
+    if (n <= 0) return null;
+    return (
+        <span className="absolute -top-1 right-1/2 translate-x-[14px] min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold grid place-items-center shadow-sm md:static md:translate-x-0 md:ml-1">
+            {n > 9 ? '9+' : n}
+        </span>
+    );
+}
+
 export function BottomNav({ isAdmin = false }: { isAdmin?: boolean }) {
     const pathname = usePathname();
     const items = isAdmin ? [...BASE_ITEMS, ADMIN_ITEM] : BASE_ITEMS;
+
+    const [avisos, setAvisos] = useState<Avisos>(AVISOS_VACIOS);
+
+    // Lo último que vio este móvil. Va por useSyncExternalStore y no por estado
+    // propio: en el servidor no hay localStorage, y así se entera al momento
+    // cuando otra parte de la app marca algo como visto.
+    const vistoFotos = useSyncExternalStore(
+        subscribirAvisos,
+        () => lerVisto('fotos'),
+        () => null,
+    );
+
+    // El único que pregunta al servidor: el resto (la insignia del chat) lo lee
+    // de lib/avisos.ts. Y solo con la pestaña a la vista, que si no se pasa el
+    // día consultando en segundo plano.
+    useEffect(() => {
+        let vivo = true;
+
+        const mirar = async () => {
+            if (document.visibilityState !== 'visible') return;
+            const a = await getAvisos();
+            if (!vivo) return;
+            setAvisos(a);
+            publicarAvisos(a);
+        };
+
+        mirar();
+        const t = setInterval(mirar, CADA);
+        document.addEventListener('visibilitychange', mirar);
+        return () => {
+            vivo = false;
+            clearInterval(t);
+            document.removeEventListener('visibilitychange', mirar);
+        };
+    }, []);
+
+    // Estando en Recordos no tiene sentido avisar de fotos nuevas. Y la primera
+    // vez de todas se toma nota y no se enseña nada, que si no saldría el total
+    // histórico como si fuese nuevo.
+    const enRecordos = pathname.startsWith('/recuerdos');
+    useEffect(() => {
+        if (avisos.fotosN <= 0) return;
+        if (enRecordos || vistoFotos === null) marcarVisto('fotos', avisos.fotosN);
+    }, [enRecordos, vistoFotos, avisos.fotosN]);
+
+    const fotosSenVer = enRecordos || vistoFotos === null
+        ? 0
+        : Math.max(0, avisos.fotosN - vistoFotos);
+
+    const insignia = (href: string) => {
+        if (href === '/mapa') return avisos.ubicacions;
+        if (href === '/recuerdos') return fotosSenVer;
+        return 0;
+    };
 
     const isActive = (href: string) =>
         href === '/' ? pathname === '/' : pathname.startsWith(href);
@@ -45,7 +116,7 @@ export function BottomNav({ isAdmin = false }: { isAdmin?: boolean }) {
                                 key={href}
                                 href={href}
                                 className={cn(
-                                    "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                                    "relative flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors",
                                     active
                                         ? "text-primary bg-primary/10"
                                         : "text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -53,6 +124,7 @@ export function BottomNav({ isAdmin = false }: { isAdmin?: boolean }) {
                             >
                                 <Icon className="w-4 h-4" />
                                 {label}
+                                <Insignia n={insignia(href)} />
                             </Link>
                         );
                     })}
@@ -79,12 +151,15 @@ export function BottomNav({ isAdmin = false }: { isAdmin?: boolean }) {
                                 key={href}
                                 href={href}
                                 className={cn(
-                                    "flex flex-col items-center justify-center gap-0.5 py-2 px-0.5 font-medium transition-colors",
+                                    "relative flex flex-col items-center justify-center gap-0.5 py-2 px-0.5 font-medium transition-colors",
                                     items.length >= 6 ? "text-[9px] tracking-tight" : "text-[10px]",
                                     active ? "text-primary" : "text-muted-foreground"
                                 )}
                             >
-                                <Icon className={cn("w-5 h-5", active && "scale-110 transition-transform")} />
+                                <span className="relative">
+                                    <Icon className={cn("w-5 h-5", active && "scale-110 transition-transform")} />
+                                    <Insignia n={insignia(href)} />
+                                </span>
                                 <span className="leading-none truncate max-w-full">{label}</span>
                             </Link>
                         );

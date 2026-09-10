@@ -139,6 +139,9 @@ lib/
   admin-pin.ts        # PIN de admin en Redis (scrypt + salt)
   admin-pin-config.ts # constantes del PIN compartidas con el cliente
   rate-limit.ts       # ventana fija sobre Redis + IP del cliente
+  avisos.ts           # insignias del menú: un solo sondeo (BottomNav) repartido
+  tempo.ts            # "fai 2 horas" / fecha, para las fotos
+  fotos.ts            # id de una foto (nombre del fichero en Blob)
   utils.ts            # cn()
 scripts/              # tsx sueltos contra Redis (seed / reset récord)
 public/               # sprites del juego (man*.png, ~2 MB cada uno)
@@ -158,6 +161,8 @@ public/               # sprites del juego (man*.png, ~2 MB cada uno)
 | `fiesta:total_games` | STRING | contador INCR |
 | `fiesta:color` | STRING | key del preset de paleta |
 | `fiesta:fotos` | LIST | fotos del mural (JSON `{url, ts, titulo?}`) |
+| `fiesta:fotos_n` | STRING | contador INCR de fotos publicadas (insignias del menú) |
+| `fiesta:chat_n` | STRING | contador INCR de mensajes publicados (insignia del chat) |
 | `fiesta:fotos_likes` | HASH | fotoId → nº de 🔥 |
 | `fiesta:fotos_like_de:<anonId>` | SET | fotos que marcó ese móvil |
 | `fiesta:loc:<anonId>` | STRING + TTL | punto del mapa (15/30/60 min o directo) |

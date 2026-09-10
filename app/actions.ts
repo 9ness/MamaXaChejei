@@ -536,6 +536,10 @@ export async function setPenaColor(key: string) {
 // --- FOTOS / MURAL DE RECUERDOS ---
 
 const FOTOS_KEY = `${NAMESPACE}:fotos`;
+// Contadores que solo suben, para las insignias del menú: comparar dos números
+// es mucho más barato que leer la lista y contar cuántos son nuevos.
+const FOTOS_N_KEY = `${NAMESPACE}:fotos_n`;
+const CHAT_N_KEY = `${NAMESPACE}:chat_n`;
 // Los 🔥 van en sus propias keys: la lista de fotos no se puede reescribir por
 // cada toque (mismo criterio que el estado de los boletos).
 const FOTOS_LIKES_KEY = `${NAMESPACE}:fotos_likes`;        // HASH fotoId -> nº
@@ -561,6 +565,7 @@ export async function addFoto(url: string, titulo?: string) {
         };
         await redis.lpush(FOTOS_KEY, JSON.stringify(foto));
         await redis.ltrim(FOTOS_KEY, 0, 299); // conserva las últimas 300
+        await redis.incr(FOTOS_N_KEY);
         revalidatePath('/recuerdos');
         return { success: true };
     } catch {
@@ -635,6 +640,29 @@ export async function toggleLike(
         return { liked: Boolean(engadido), likes };
     } catch {
         return { error: 'Non se puido gardar.' };
+    }
+}
+
+/**
+ * Todo lo que necesitan las insignias del menú, en UNA llamada: cuánta gente
+ * comparte ubicación ahora mismo y los contadores de chat y fotos. Lo pide solo
+ * `BottomNav` y lo reparte por `lib/avisos.ts`.
+ */
+export async function getAvisos(): Promise<{ ubicacions: number; chatN: number; fotosN: number }> {
+    noStore();
+    try {
+        const [puntos, contadores] = await Promise.all([
+            getLocations(),
+            redis.mget<(string | number | null)[]>(CHAT_N_KEY, FOTOS_N_KEY),
+        ]);
+
+        return {
+            ubicacions: puntos.length,
+            chatN: Number(contadores?.[0]) || 0,
+            fotosN: Number(contadores?.[1]) || 0,
+        };
+    } catch {
+        return { ubicacions: 0, chatN: 0, fotosN: 0 };
     }
 }
 

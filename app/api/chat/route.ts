@@ -85,6 +85,8 @@ export async function POST(request: Request) {
 
         await redis.lpush(CHAT_KEY, JSON.stringify(msg));
         await redis.ltrim(CHAT_KEY, 0, 49);
+        // Contador para la insignia de mensajes sin leer (ver lib/avisos.ts).
+        await redis.incr('fiesta:chat_n');
 
         // Fetch updated list
         const rawMsgs = await redis.lrange(CHAT_KEY, 0, 49);
