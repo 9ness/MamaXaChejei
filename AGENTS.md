@@ -123,7 +123,6 @@ components/
   BoletoShare.tsx       # comparte la IMAGEN del boleto (Web Share con files)
   ApostarPanel.tsx      # apostar moedas (identidad = anon_id del navegador)
   ResolverBoleto.tsx    # admin: cerrar un boleto como gañado/perdido
-  LupeBetCard.tsx       # bloque de la portada que lleva a /lupebet
   SecretAdminGate.tsx   # 5 toques en el título de Header → interruptor admin
   AdminPinFlow.tsx      # flujo del PIN (marcar / crear+repetir), compartido
   PinPad.tsx            # teclado numérico controlado (login y cambio de PIN)
