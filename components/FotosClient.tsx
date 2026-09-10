@@ -2,12 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { upload } from '@vercel/blob/client';
-import { addFoto, getFotos, getMeusLikes, toggleLike, type Foto } from '@/app/actions';
+import { addFoto, deleteFoto, getFotos, getMeusLikes, getMinasFotos, toggleLike, type Foto } from '@/app/actions';
 import { getAnonId } from '@/lib/anon-id';
 import { fotoId } from '@/lib/fotos';
+import { DIAS_FESTA, diaDaFoto } from '@/lib/festas';
 import { fai } from '@/lib/tempo';
 import { Button } from '@/components/ui/button';
-import { Camera, Flame, ImagePlus, Loader2, X } from 'lucide-react';
+import { Camera, Flame, ImagePlus, Loader2, Trash2, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
 // --- COMPRESIÓN EN EL MÓVIL ---
@@ -95,11 +96,7 @@ function Cando({ ts, claro = false }: { ts: number; claro?: boolean }) {
     }, [ts]);
 
     if (!texto) return null;
-    return (
-        <span className={`block text-[11px] ${claro ? 'text-white/60' : 'text-muted-foreground/80'}`}>
-            {texto}
-        </span>
-    );
+    return <span className={claro ? 'text-white/60' : ''}>{texto}</span>;
 }
 
 /**
@@ -166,14 +163,19 @@ function BotonLume({
 export function FotosClient({
     initialFotos,
     initialLikes = {},
+    isAdmin = false,
 }: {
     initialFotos: Foto[];
     initialLikes?: Record<string, number>;
+    isAdmin?: boolean;
 }) {
     const [fotos, setFotos] = useState<Foto[]>(initialFotos);
     const [likes, setLikes] = useState<Record<string, number>>(initialLikes);
     const [meus, setMeus] = useState<Set<string>>(new Set());
-    const [orde, setOrde] = useState<'data' | 'likes'>('data');
+    const [orde, setOrde] = useState<'data' | 'likes' | 'dias'>('data');
+    const [dia, setDia] = useState<string | null>(null);
+    // Las fotos que subió este móvil: son las que puede borrar (el admin, todas).
+    const [minas, setMinas] = useState<Set<string>>(new Set());
     // Qué foto acaba de encenderse, para lanzar la animación una sola vez.
     const [arde, setArde] = useState<string | null>(null);
     const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -206,6 +208,10 @@ export function FotosClient({
         getMeusLikes(getAnonId())
             .then((ids) => { if (vivo) setMeus(new Set(ids)); })
             .catch(() => { /* se quedan todas apagadas y ya */ });
+
+        getMinasFotos(getAnonId())
+            .then((ids) => { if (vivo) setMinas(new Set(ids)); })
+            .catch(() => { /* sin papelera y ya */ });
         return () => {
             vivo = false;
             if (temporizador.current) clearTimeout(temporizador.current);
@@ -283,13 +289,42 @@ export function FotosClient({
         tapPendente.current = { id, timer };
     };
 
+    const borrar = async (f: Foto) => {
+        const id = fotoId(f.url);
+        if (!id) return;
+        if (!confirm('Seguro que queres borrar esta foto?')) return;
+
+        const antes = fotos;
+        setFotos((prev) => prev.filter((x) => x.url !== f.url));
+        const res = await deleteFoto(f.url, getAnonId());
+        if (res?.error) {
+            setFotos(antes);
+            setError(res.error);
+        }
+    };
+
+    // Cuántas fotos hay de cada jornada. Se calcula una vez y sirve para el
+    // selector y para saber por qué día abrirlo.
+    const porDia = fotos.reduce<Record<string, number>>((acc, f) => {
+        const d = diaDaFoto(f.ts);
+        acc[d] = (acc[d] ?? 0) + 1;
+        return acc;
+    }, {});
+
+    // Sin elegir nada, se abre por la jornada de la foto más nueva (que es la
+    // primera de la lista). Nada de Date.now() aquí: el render tiene que dar
+    // siempre lo mismo.
+    const diaActivo = dia ?? (fotos.length > 0 ? diaDaFoto(fotos[0].ts) : DIAS_FESTA[0].id);
+
     const listadas = orde === 'likes'
         ? [...fotos].sort((a, b) => {
             const da = likes[fotoId(a.url)] ?? 0;
             const db = likes[fotoId(b.url)] ?? 0;
             return db - da || b.ts - a.ts;
         })
-        : fotos;
+        : orde === 'dias'
+            ? fotos.filter((f) => diaDaFoto(f.ts) === diaActivo)
+            : fotos;
 
     const limpiaInputs = () => {
         // Se limpian los dos: si no, elegir la misma foto otra vez no dispara
@@ -334,7 +369,10 @@ export function FotosClient({
                     access: 'public',
                     handleUploadUrl: '/api/fotos/upload',
                 });
-                await addFoto(blob.url, titulo);
+                const nome = (() => {
+                    try { return localStorage.getItem('chat_username') || ''; } catch { return ''; }
+                })();
+                await addFoto(blob.url, titulo, nome, getAnonId());
                 done++;
             } catch (err) {
                 // El motivo técnico va á consola; á peña só lle interesa saber
@@ -456,10 +494,11 @@ export function FotosClient({
                     {/* Ordenar: por defecto as últimas, que é o que se mira na
                         festa; o outro é para ver as que máis gustaron. */}
                     {fotos.length > 1 && (
-                        <div className="flex justify-center gap-1.5">
+                        <div className="flex justify-center gap-1.5 flex-wrap">
                             {([
-                                { v: 'data' as const, label: '🕒 Máis recentes' },
-                                { v: 'likes' as const, label: '🔥 Máis gustadas' },
+                                { v: 'data' as const, label: '🕒 Recentes' },
+                                { v: 'likes' as const, label: '🔥 Gustadas' },
+                                { v: 'dias' as const, label: '📅 Por días' },
                             ]).map((op) => (
                                 <button
                                     key={op.v}
@@ -477,9 +516,51 @@ export function FotosClient({
                         </div>
                     )}
 
+                    {/* Las jornadas no caben todas: se arrastra de lado. Cada una
+                        se ancla al borde para que no queden a medias. */}
+                    {orde === 'dias' && (
+                        <div className="-mx-4 px-4 flex gap-1.5 overflow-x-auto no-scrollbar snap-x snap-mandatory">
+                            {DIAS_FESTA.map((d) => {
+                                const n = porDia[d.id] ?? 0;
+                                const activo = d.id === diaActivo;
+                                return (
+                                    <button
+                                        key={d.id}
+                                        type="button"
+                                        onClick={() => setDia(d.id)}
+                                        className={`snap-start shrink-0 rounded-lg px-3 py-1.5 text-left border transition-colors ${
+                                            activo
+                                                ? 'bg-primary text-primary-foreground border-primary'
+                                                : n > 0
+                                                    ? 'bg-card hover:bg-muted'
+                                                    : 'bg-card text-muted-foreground/50'
+                                        }`}
+                                    >
+                                        <span className="block text-xs font-bold leading-tight whitespace-nowrap">
+                                            {d.alcume ?? d.etiqueta}
+                                        </span>
+                                        <span className={`block text-[10px] leading-tight whitespace-nowrap ${activo ? 'opacity-80' : 'text-muted-foreground'}`}>
+                                            {d.alcume ? d.etiqueta : `${n} foto${n === 1 ? '' : 's'}`}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    <p className="text-center text-[11px] text-muted-foreground">
+                        Recordos totais: <span className="font-bold text-foreground">{fotos.length}</span>
+                        {orde === 'dias' && ` · ${listadas.length} nesta xornada`}
+                    </p>
+
                     {/* Rejilla de verdad y no columnas CSS: así SIEMPRE entran dos
                         por fila, por estrecho que sea el móvil, y el mural se ve
                         parejo según se van sumando fotos. */}
+                    {listadas.length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-10">
+                            Ningunha foto desta xornada. Aínda. 👀
+                        </p>
+                    ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3">
                         {listadas.map((f, i) => {
                             const id = fotoId(f.url);
@@ -520,9 +601,23 @@ export function FotosClient({
                                                     {f.titulo}
                                                 </span>
                                             )}
-                                            <Cando ts={f.ts} />
+                                            <span className="block text-[11px] text-muted-foreground/80 truncate">
+                                                {f.autor && <span className="font-medium">{f.autor} · </span>}
+                                                <Cando ts={f.ts} />
+                                            </span>
                                         </span>
-                                        <span className="ml-auto">
+                                        <span className="ml-auto flex items-center">
+                                            {(isAdmin || minas.has(id)) && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => borrar(f)}
+                                                    aria-label="Borrar a foto"
+                                                    title={isAdmin ? 'Borrar (admin)' : 'Borrar a túa foto'}
+                                                    className="p-1 rounded-md text-muted-foreground/70 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                                >
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                            )}
                                             <BotonLume
                                                 n={n}
                                                 meu={meu}
@@ -535,6 +630,7 @@ export function FotosClient({
                             );
                         })}
                     </div>
+                    )}
                 </>
             )}
 

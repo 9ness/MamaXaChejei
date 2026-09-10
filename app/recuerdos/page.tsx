@@ -1,11 +1,12 @@
 import { Header } from '@/components/Header';
 import { FotosClient } from '@/components/FotosClient';
 import { getFotos, getLikes } from '@/app/actions';
+import { isAdmin } from '@/lib/admin-auth';
 
 export const dynamic = 'force-dynamic';
 
 export default async function RecuerdosPage() {
-    const [fotos, likes] = await Promise.all([getFotos(), getLikes()]);
+    const [fotos, likes, admin] = await Promise.all([getFotos(), getLikes(), isAdmin()]);
 
     return (
         <main className="min-h-screen bg-gray-50/50 dark:bg-zinc-950">
@@ -21,7 +22,7 @@ export default async function RecuerdosPage() {
                     </p>
                 </div>
 
-                <FotosClient initialFotos={fotos} initialLikes={likes} />
+                <FotosClient initialFotos={fotos} initialLikes={likes} isAdmin={admin} />
             </div>
         </main>
     );

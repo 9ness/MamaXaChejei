@@ -20,6 +20,7 @@ import {
     mercadoBoleto,
     multiplicadorAposta,
 } from '@/lib/lupebet';
+import { fotoId } from '@/lib/fotos';
 import { revalidatePath, unstable_noStore as noStore } from 'next/cache';
 import { z } from 'zod';
 
@@ -539,6 +540,10 @@ const FOTOS_KEY = `${NAMESPACE}:fotos`;
 // Contadores que solo suben, para las insignias del menú: comparar dos números
 // es mucho más barato que leer la lista y contar cuántos son nuevos.
 const FOTOS_N_KEY = `${NAMESPACE}:fotos_n`;
+// Quién subió cada foto, para que pueda borrarla. Va en su propia HASH y NUNCA
+// sale al cliente: el anonId es la llave de las moedas de esa persona, y
+// publicarlo en la lista de fotos sería regalar su identidad a cualquiera.
+const FOTOS_AUTOR_KEY = `${NAMESPACE}:fotos_autor`;
 const CHAT_N_KEY = `${NAMESPACE}:chat_n`;
 // Los 🔥 van en sus propias keys: la lista de fotos no se puede reescribir por
 // cada toque (mismo criterio que el estado de los boletos).
@@ -550,26 +555,104 @@ export interface Foto {
     ts: number;
     /** Pie de foto, opcional: quien sube decide si le pone algo o no. */
     titulo?: string;
+    /** Solo el NOMBRE de quien la subió, para enseñarlo. La identidad de
+     *  verdad (el anonId) vive aparte, en FOTOS_AUTOR_KEY. */
+    autor?: string;
 }
 
-export async function addFoto(url: string, titulo?: string) {
+export async function addFoto(url: string, titulo?: string, autor?: string, anonId?: string) {
     if (!url || typeof url !== 'string' || !url.startsWith('http')) {
         return { success: false };
     }
     try {
         const pie = (titulo ?? '').replace(/\s+/g, ' ').trim().slice(0, 80);
+        const quen = (autor ?? '').trim().slice(0, 24);
         const foto: Foto = {
             url: url.slice(0, 500),
             ts: Date.now(),
             ...(pie ? { titulo: pie } : {}),
+            ...(quen ? { autor: quen } : {}),
         };
         await redis.lpush(FOTOS_KEY, JSON.stringify(foto));
         await redis.ltrim(FOTOS_KEY, 0, 299); // conserva las últimas 300
         await redis.incr(FOTOS_N_KEY);
+
+        const dono = limpiaAnonId(anonId);
+        const id = fotoId(foto.url);
+        if (dono && id) await redis.hset(FOTOS_AUTOR_KEY, { [id]: dono });
         revalidatePath('/recuerdos');
         return { success: true };
     } catch {
         return { success: false };
+    }
+}
+
+/**
+ * Borrar una foto: el admin, cualquiera; el resto, solo las suyas. Se lleva por
+ * delante el fichero en Blob y el contador de 🔥, que si no quedan ahí colgados.
+ */
+export async function deleteFoto(url: string, anonId?: string): Promise<{ success?: true; error?: string }> {
+    const id = fotoId(url);
+    if (!id) return { error: 'Foto non válida.' };
+
+    try {
+        const admin = await isAdminRequest();
+        if (!admin) {
+            const dono = limpiaAnonId(anonId);
+            const gardado = await redis.hget<string>(FOTOS_AUTOR_KEY, id);
+            if (!dono || !gardado || String(gardado) !== dono) {
+                return { error: 'Esa foto non é túa.' };
+            }
+        }
+
+        // La lista se reescribe entera, como el chat: son 300 como mucho.
+        const raw = await redis.lrange(FOTOS_KEY, 0, 299);
+        const quedan = raw
+            .map((s: string | object) => {
+                try {
+                    return typeof s === 'object' ? (s as Foto) : (JSON.parse(s) as Foto);
+                } catch {
+                    return null;
+                }
+            })
+            .filter((f): f is Foto => Boolean(f && f.url && fotoId(f.url) !== id));
+
+        await redis.del(FOTOS_KEY);
+        if (quedan.length > 0) {
+            await redis.rpush(FOTOS_KEY, ...quedan.map((f) => JSON.stringify(f)));
+        }
+
+        await redis.hdel(FOTOS_LIKES_KEY, id);
+        await redis.hdel(FOTOS_AUTOR_KEY, id);
+
+        // El fichero de Blob, aparte: si esto falla, la foto ya no se ve igual.
+        try {
+            const { del } = await import('@vercel/blob');
+            await del(url);
+        } catch {
+            // sin token o ya borrado: no rompe el borrado de la lista
+        }
+
+        revalidatePath('/recuerdos');
+        return { success: true };
+    } catch {
+        return { error: 'Non se puido borrar a foto.' };
+    }
+}
+
+/** Qué fotos subió ESTE móvil, para enseñarle a él la papelera. */
+export async function getMinasFotos(anonId: string): Promise<string[]> {
+    noStore();
+    const dono = limpiaAnonId(anonId);
+    if (!dono) return [];
+    try {
+        const todo = await redis.hgetall<Record<string, string>>(FOTOS_AUTOR_KEY);
+        if (!todo) return [];
+        return Object.entries(todo)
+            .filter(([, v]) => String(v) === dono)
+            .map(([k]) => k);
+    } catch {
+        return [];
     }
 }
 
