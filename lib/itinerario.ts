@@ -1,67 +1,69 @@
 // Itinerario da Festa da Guadalupe (Rianxo) por días e horas.
-// Contido baseado no cartel 2025 (festasdaguadalupe.gal). As datas 2026 son
-// PROVISIONAIS: mantéñense os mesmos días da semana (Venres→Venres), pero en
-// 2026 o primeiro venres cae o 11 de setembro. Actualízanse co cartel oficial.
+// Contido do PROGRAMA OFICIAL 2026 (PDF da organización, 11-18 de setembro).
+// Xa non é provisional: as horas e os grupos son os do cartel.
 
 export interface ItinerarioEvento {
     hora: string;   // "HH:MM" (24h)
     titulo: string;
     grupo?: string; // artista/orquestra (texto rosa no cartel)
-    lugar?: string;
+    lugar?: string; // sitio concreto, sae cun chincheta (e algún día no mapa)
+    /** Letra pequena do cartel: organiza, colabora, patrocina, cortesía de… */
+    nota?: string;
     icono?: string; // emoji
 }
 
 export interface ItinerarioDia {
-    fecha: string;   // "YYYY-MM-DD" (2026, provisional)
+    fecha: string;   // "YYYY-MM-DD"
     etiqueta: string;
     eventos: ItinerarioEvento[];
 }
 
-export const ITINERARIO_PROVISIONAL = true;
+export const ITINERARIO_PROVISIONAL = false;
 
 export const ITINERARIO: ItinerarioDia[] = [
     {
         fecha: '2026-09-11',
         etiqueta: 'Venres',
         eventos: [
-            { hora: '22:00', titulo: 'Festa dos 90', grupo: 'The Cuncas', lugar: 'Praza Castelao', icono: '🎧' },
-            { hora: '00:00', titulo: 'Chupitaso · Presentación das Juadalupeñas', icono: '🥳' },
-            { hora: '01:00', titulo: 'VídeoDJ dos 90', grupo: 'Serieb Music', icono: '🎧' },
-            { hora: '03:00', titulo: 'Pinchada libre', grupo: 'DJ Ekix', icono: '🎧' },
+            { hora: '22:00', titulo: 'Noite Retro', grupo: 'Virtual Project Cover Band', icono: '🎸' },
+            { hora: '23:45', titulo: 'Pregón das Festas', nota: 'Organiza o Concello de Rianxo', icono: '📣' },
+            { hora: '00:00', titulo: 'Chupitaso · Presentación musical das Juadalupeñas', icono: '🥳' },
+            { hora: '00:30', titulo: 'VídeoDJ 80s, 90s, 2000s…', grupo: 'Serieb Music', icono: '🎧' },
+            { hora: '04:00', titulo: 'Pinchada libre', grupo: 'Xinho', icono: '🎧' },
         ],
     },
     {
         fecha: '2026-09-12',
         etiqueta: 'Sábado',
         eventos: [
-            { hora: '10:00', titulo: 'Alborada', grupo: 'Banda da Escola de Música de Rianxo', icono: '🎺' },
+            { hora: '10:00', titulo: 'Alborada', grupo: 'Banda de Música de Santa Cruz de Ribadulla', icono: '🎺' },
             { hora: '10:00', titulo: 'Alborada pola parroquia', grupo: 'Trécola', icono: '🎺' },
-            { hora: '10:00', titulo: 'Ruta Cicloturista (saída ás 11)', lugar: 'Praza Castelao', icono: '🚴' },
-            { hora: '13:00', titulo: 'Concerto', grupo: 'Banda da Escola de Música de Rianxo', lugar: 'Praza da Igrexa', icono: '🎺' },
-            { hora: '14:00', titulo: 'Sesión vermú coa orquestra', grupo: 'Channel', icono: '🍻' },
-            { hora: '18:00', titulo: 'Concerto', grupo: 'Banda Xuvenil da Escola de Música de Rianxo', lugar: 'Praza da Igrexa', icono: '🎺' },
-            { hora: '19:00', titulo: 'Tardeo', grupo: 'Naitinain', lugar: 'Rúa de Abaixo', icono: '🍹' },
+            { hora: '13:00', titulo: 'Concerto', grupo: 'Banda de Música de Santa Cruz de Ribadulla', lugar: 'Praza da Igrexa', icono: '🎺' },
+            { hora: '14:00', titulo: 'Sesión vermú coa orquestra', grupo: 'Platinum', icono: '🍻' },
+            { hora: '18:00', titulo: 'Concerto', grupo: 'Banda de Música de Santa Cruz de Ribadulla', lugar: 'Praza da Igrexa', nota: 'Programa ALICERCE da Rede Cultural da Deputación da Coruña', icono: '🎺' },
+            { hora: '19:00', titulo: 'Tardeo', grupo: 'Zeltia Irevire', lugar: 'Rúa do Medio', nota: 'Colabora O Recuncho Café', icono: '🍹' },
+            { hora: '19:30', titulo: 'Novena e ofrendas', lugar: 'Capela de Guadalupe', icono: '⛪' },
             { hora: '20:00', titulo: 'Baile e música tradicionais', grupo: 'Fogo Fatuo', lugar: 'Praza da Igrexa', icono: '💃' },
-            { hora: '20:00', titulo: 'Novena e Ofrenda', lugar: 'Capela de Guadalupe', icono: '⛪' },
-            { hora: '20:00', titulo: 'Certame de Corais', grupo: 'Coral Abraira + convidadas', lugar: 'Auditorio', icono: '🎵' },
-            { hora: '20:00', titulo: 'Charanga polas rúas', grupo: 'Os Celtas', icono: '🎺' },
-            { hora: '21:30', titulo: 'Verbena Galega', grupo: 'Orquestra Channel · Pili Pampín · Mekanika Rolling Band · Coolnenas · Galician Army', icono: '🎶' },
+            { hora: '20:00', titulo: 'Certame de Corais', grupo: 'Coral Abraira (Asados) + corais convidadas', lugar: 'Auditorio', nota: 'Patrocina o Concello de Rianxo', icono: '🎵' },
+            { hora: '20:00', titulo: 'Charanga polas rúas da vila', grupo: 'Brass-Ass', icono: '🎺' },
+            { hora: '21:30', titulo: 'Sábado noite', grupo: 'Mariachi Perla', icono: '🎺' },
+            { hora: '22:30', titulo: 'Orquestra', grupo: 'Platinum', icono: '🎶' },
+            { hora: '23:30', titulo: 'Verbena Sinfónica', grupo: 'Banda da Escola de Música de Rianxo', nota: 'Patrocina o Concello de Rianxo', icono: '🎶' },
+            { hora: '02:00', titulo: 'Verbena', grupo: 'Capitán Sabrosura', icono: '🎶' },
+            { hora: '04:00', titulo: 'Pinchada', grupo: 'DJ Nexxa', icono: '🎧' },
         ],
     },
     {
         fecha: '2026-09-13',
         etiqueta: 'Domingo',
         eventos: [
-            { hora: '10:00', titulo: 'Alborada', grupo: 'Banda de Música de Catoira · Banda de Gaitas Buxaina de Taragoña', icono: '🎺' },
-            { hora: '11:00', titulo: 'Recepción á veciñanza de Requejo de Sanabria e Os Prados–Xesta', icono: '🤝' },
-            { hora: '11:00', titulo: 'Rondalla polas rúas', grupo: 'Mariachi Perla', icono: '🎻' },
-            { hora: '12:00', titulo: 'Misa Solemne + Las Mañanitas', grupo: 'Coral Abraira · Mariachi Perla', lugar: 'Capela de Guadalupe', icono: '⛪' },
-            { hora: '13:00', titulo: 'Procesión Marítima', lugar: 'Ribeira', icono: '⛪' },
-            { hora: '18:00', titulo: 'Concerto', grupo: 'Banda de Música de Catoira', lugar: 'Praza da Igrexa', icono: '🎺' },
-            { hora: '19:00', titulo: 'Tardeo', grupo: 'Sós', lugar: 'A Martela', icono: '🍹' },
-            { hora: '19:00', titulo: 'Baile-Romaría', grupo: 'Trío Alborada', lugar: 'Paseo da Ribeira', icono: '💃' },
+            { hora: '10:00', titulo: 'Alborada', grupo: 'Agrupación músico cultural de Ribadumia · Banda de Gaitas Buxaina de Taragoña', icono: '🎺' },
+            { hora: '12:00', titulo: 'Misa Solemne', grupo: 'Coral Abraira', lugar: 'Capela de Guadalupe', icono: '⛪' },
+            { hora: '13:00', titulo: 'Tradicional Procesión Marítima', lugar: 'Paseo da Ribeira', nota: 'Colaboran a Confraría e as asociacións mexilloeiras', icono: '⛪' },
+            { hora: '18:00', titulo: 'Concerto', grupo: 'Agrupación músico cultural de Ribadumia', lugar: 'Praza da Igrexa', icono: '🎺' },
+            { hora: '19:00', titulo: 'Baile-Romaría', grupo: 'Grupo Arena', lugar: 'Paseo da Ribeira', icono: '💃' },
             { hora: '20:00', titulo: 'Baile e música tradicionais', grupo: 'Vai de Roda', lugar: 'Praza da Igrexa', icono: '💃' },
-            { hora: '22:00', titulo: 'Verbena', grupo: 'Grupo Beatriz · Arizona', icono: '🎶' },
+            { hora: '22:00', titulo: 'Verbena', grupo: 'Galilea · La Banda de Ayer', icono: '🎶' },
             { hora: '00:00', titulo: 'Fogos de artificio aéreos e acuáticos', lugar: 'Paseo da Ribeira', icono: '🎆' },
         ],
     },
@@ -69,71 +71,74 @@ export const ITINERARIO: ItinerarioDia[] = [
         fecha: '2026-09-14',
         etiqueta: 'Luns',
         eventos: [
-            { hora: '10:00', titulo: 'Alborada', grupo: 'Banda Cultural de Arcade', icono: '🎺' },
+            { hora: '10:00', titulo: 'Alborada', grupo: 'Banda de Música Cultural de Arcade', icono: '🎺' },
             { hora: '11:00', titulo: 'Visita da Virxe de Guadalupe á Igrexa Parroquial', icono: '⛪' },
-            { hora: '11:30', titulo: 'Xogos das peñas (Juadalupeñas)', lugar: 'Praza Castelao', icono: '🎉' },
-            { hora: '13:00', titulo: 'Concerto', grupo: 'Banda Cultural de Arcade', lugar: 'Praza da Igrexa', icono: '🎺' },
+            { hora: '11:30', titulo: 'Xogos das Juadalupeñas', lugar: 'Praza Castelao', nota: 'Organiza a Comisión de Juadalupeñas', icono: '🎪' },
+            { hora: '13:00', titulo: 'Concerto', grupo: 'Banda de Música Cultural de Arcade', lugar: 'Praza da Igrexa', icono: '🎺' },
             { hora: '14:00', titulo: 'Sesión vermú', grupo: 'Unión y Fuerza', icono: '🍻' },
-            { hora: '15:00', titulo: 'Xantar popular das Juadalupeñas', lugar: 'Parque da Martela', icono: '🍽️' },
-            { hora: '18:00', titulo: 'Festivaliño', lugar: 'Rock in Rian', icono: '🎸' },
-            { hora: '18:00', titulo: 'Concerto', grupo: 'Banda Cultural de Arcade', lugar: 'Praza da Igrexa', icono: '🎺' },
+            { hora: '18:00', titulo: 'Festivaliño', nota: 'Organiza a Comisión de Juadalupeñas', icono: '🎪' },
+            { hora: '18:00', titulo: 'Concerto', grupo: 'Banda de Música Cultural de Arcade', lugar: 'Praza da Igrexa', icono: '🎺' },
             { hora: '20:00', titulo: 'Cantos populares', grupo: 'Cántañe a Rianxo con Río de Anxo', lugar: 'Praza da Igrexa', icono: '🎵' },
-            { hora: '22:00', titulo: 'Verbena', grupo: 'Unión y Fuerza · Gran Parada', icono: '🎶' },
+            { hora: '22:00', titulo: 'Verbena', grupo: 'Unión y Fuerza · Cayenna', icono: '🎶' },
         ],
     },
     {
         fecha: '2026-09-15',
         etiqueta: 'Martes',
         eventos: [
-            { hora: '11:00', titulo: 'Da alborada ao vermú polas rúas', grupo: 'O Son do Río', icono: '🎺' },
-            { hora: '11:30', titulo: 'Cultura Urbana: ParkourPark, WorkoutPark e Muralismo', lugar: 'Praza da Igrexa e Xardíns da Ribeira', icono: '🛹' },
+            { hora: '11:00', titulo: 'Da alborada ao vermú polas rúas cos gaiteiros', grupo: 'O Son do Río', icono: '🎺' },
+            { hora: '12:00', titulo: 'Cultura Urbana: Soccer Experience', grupo: 'Vella Escola Cultura Urbana', lugar: 'Paseo da Ribeira', icono: '⚽' },
             { hora: '14:00', titulo: 'Sesión vermú', grupo: 'Dilema', lugar: 'Praza Castelao', icono: '🍻' },
-            { hora: '17:00', titulo: 'Continuación de Cultura Urbana', icono: '🛹' },
-            { hora: '18:30', titulo: 'Día de Padrón: recepción e concerto', grupo: 'Banda Municipal de Padrón', lugar: 'Campo de Arriba', icono: '🎺' },
-            { hora: '20:00', titulo: 'Charanga polas rúas', grupo: 'Charandonga', icono: '🎺' },
-            { hora: '20:00', titulo: 'Freestyle e RAP en galego', grupo: 'Ceibarimas: O Pirata · Big Meu · NubeNegra · Jallejo · XianPais · Mog · Carola', lugar: 'Praza da Igrexa', icono: '🎤' },
-            { hora: '22:00', titulo: 'Verbena', grupo: 'Cougar · Marbella', icono: '🎶' },
+            { hora: '16:00', titulo: 'Cultura Urbana: VR Arena', grupo: 'Vella Escola Cultura Urbana', lugar: 'Paseo da Ribeira', icono: '🎮' },
+            { hora: '18:30', titulo: 'Día de Padrón · Recepción ás autoridades de Padrón', grupo: 'Banda da Escola de Música de Rianxo', nota: 'Organiza o Concello de Rianxo', icono: '🤝' },
+            { hora: '19:30', titulo: 'Concerto', grupo: 'Banda de Música Municipal de Padrón', lugar: 'Campo de Arriba', nota: 'Cortesía do Concello de Padrón', icono: '🎺' },
+            { hora: '20:00', titulo: 'Charanga polas rúas da vila', grupo: 'Fanfarria Furruxa', icono: '🎺' },
+            { hora: '20:00', titulo: 'Obradoiro freestyle e concertos de RAP en galego', grupo: 'Ceibarimas · Kid Mount · Festra · Mooom · Pini · O Rabelo · Volk GZ · Queen Rendi · O netinho da Aurora', lugar: 'Praza da Igrexa', nota: 'Con Merenda Creativa', icono: '🎤' },
+            { hora: '22:00', titulo: 'Verbena', grupo: 'Charleston Big Band · La Última Legión', icono: '🎶' },
         ],
     },
     {
         fecha: '2026-09-16',
         etiqueta: 'Mércores',
         eventos: [
-            { hora: '11:00', titulo: 'Da alborada ao vermú polas rúas', grupo: 'Os Festas', icono: '🎺' },
-            { hora: '13:00', titulo: 'Circo na rúa', grupo: 'Asacocirco Show', lugar: 'Praza da Igrexa', icono: '🎪' },
-            { hora: '14:00', titulo: 'Sesión vermú', grupo: 'Trío Alborada', lugar: 'Praza Castelao', icono: '🍻' },
-            { hora: '15:00', titulo: 'Día dos Nosos Maiores: Xantar e Baile', grupo: 'José Manuel Domínguez', icono: '🍽️' },
-            { hora: '18:00', titulo: 'Concerto', grupo: 'Banda de Música de Visantoña', lugar: 'Praza da Igrexa', icono: '🎺' },
-            { hora: '19:00', titulo: 'Tardeo', grupo: 'Ulex', lugar: 'Rúa do Medio', icono: '🍹' },
-            { hora: '20:00', titulo: 'Circo na rúa', grupo: 'O Rei Midas', lugar: 'Praza da Igrexa', icono: '🎪' },
-            { hora: '20:00', titulo: 'Charanga polas rúas', grupo: 'Charanga Furruxa', icono: '🎺' },
-            { hora: '22:00', titulo: 'Verbena', grupo: 'Cayenna · Satélites', icono: '🎶' },
+            { hora: '11:00', titulo: 'Da alborada ao vermú polas rúas cos gaiteiros', grupo: 'Os Festas', icono: '🎺' },
+            { hora: '12:00', titulo: 'Feira do Circo · Xogos de feira todo o día', lugar: 'Praza da Igrexa', icono: '🎪' },
+            { hora: '13:00', titulo: 'O Show de Fifo: Soño', icono: '🤡' },
+            { hora: '14:00', titulo: 'Sesión vermú', grupo: 'Solara', lugar: 'Praza Castelao', icono: '🍻' },
+            { hora: '15:00', titulo: 'Xantar dos nosos maiores', grupo: 'Baile con José Manuel Domínguez', nota: 'Organiza o Concello de Rianxo', icono: '🍽️' },
+            { hora: '16:00', titulo: 'Feira do Circo', lugar: 'Praza da Igrexa', icono: '🎪' },
+            { hora: '18:00', titulo: 'Concerto', grupo: 'Banda de Música de Arca', lugar: 'Campo de Arriba', nota: 'Por cortesía da Escola de Música de Rianxo · Programa ALICERCE da Deputación da Coruña', icono: '🎺' },
+            { hora: '19:00', titulo: 'Tardeo', grupo: 'Malezza', lugar: 'Rúa de Abaixo', nota: 'Colabora o Restaurante O Vilar', icono: '🍹' },
+            { hora: '19:30', titulo: 'Bailes de salón', grupo: 'El Tomasón', lugar: 'Campo de Arriba', icono: '💃' },
+            { hora: '20:00', titulo: 'Circo na rúa: Unha de Piratas', lugar: 'Praza da Igrexa', icono: '🎪' },
+            { hora: '20:00', titulo: 'Charanga polas rúas da vila', grupo: 'Bando das Gaitas (Portugal)', icono: '🎺' },
+            { hora: '22:00', titulo: 'Verbena', grupo: 'Solara · Cinema', icono: '🎶' },
         ],
     },
     {
         fecha: '2026-09-17',
         etiqueta: 'Xoves',
         eventos: [
-            { hora: '10:00', titulo: 'Feirón Mariñeiro «A feira de 1925»', lugar: 'Casco vello (todo o día)', icono: '🛍️' },
+            { hora: '11:00', titulo: 'Feirón Mariñeiro «A feira de 1926» · artesanía todo o día', lugar: 'Casco vello da vila', nota: 'Colaboran as asociacións culturais locais e a veciñanza de Rianxo', icono: '⚓' },
             { hora: '13:00', titulo: 'Sesión vermú', grupo: 'Cé Orquestra Pantasma', lugar: 'Praza da Igrexa', icono: '🍻' },
-            { hora: '14:00', titulo: 'Sesión vermú', grupo: 'Grupo Alaska', lugar: 'Praza Castelao', icono: '🍻' },
-            { hora: '20:00', titulo: 'Rianxeira Popular', lugar: 'Xardíns da Ribeira', icono: '🎵' },
-            { hora: '21:00', titulo: 'Noite Folc', grupo: 'Benofán · Alvariza · Maruxa e Coralia Dilleis', lugar: 'Xardíns da Ribeira', icono: '🎻' },
-            { hora: '22:00', titulo: 'Verbena', grupo: 'Banda Gaudí · New York', icono: '🎶' },
+            { hora: '14:00', titulo: 'Sesión vermú', grupo: 'Trío Alborada', lugar: 'Praza Castelao', icono: '🍻' },
+            { hora: '20:00', titulo: 'Paxaro Pinto', lugar: 'Xardíns da Ribeira', icono: '🎵' },
+            { hora: '21:00', titulo: 'Noite Folc', grupo: 'Mediarea · Boavila', icono: '🪗' },
+            { hora: '22:00', titulo: 'Verbena', grupo: 'Arizona · Gran Parada', icono: '🎶' },
         ],
     },
     {
         fecha: '2026-09-18',
         etiqueta: 'Venres',
         eventos: [
-            { hora: '11:00', titulo: 'Día Infantil: Gran Xincana Inchable', lugar: 'Praza Virxe de Guadalupe', icono: '🎈' },
-            { hora: '13:00', titulo: 'Festa da Escuma', lugar: 'Praza Castelao', icono: '🫧' },
-            { hora: '14:00', titulo: 'Sesión vermú', grupo: 'Mar de Arousa', icono: '🍻' },
-            { hora: '16:00', titulo: 'Gran Xincana Inchable', icono: '🎈' },
-            { hora: '23:00', titulo: 'Verbena Infantil', grupo: 'Uxía Lambona e a Banda Molona', lugar: 'Praza da Igrexa', icono: '🧒' },
-            { hora: '00:00', titulo: 'Rianxeira Infantil', icono: '🎵' },
-            { hora: '00:30', titulo: 'Gran Verbena (3 orquestras)', grupo: 'Mar de Arousa · Ritmo Xoven · Saudade', icono: '🎶' },
-            { hora: '02:00', titulo: 'Gran traca final: bengalas e Rianxeira', icono: '🎆' },
+            { hora: '11:00', titulo: 'Día Infantil · Inchables acuáticos todo o día', lugar: 'Praza Virxe de Guadalupe', icono: '🎈' },
+            { hora: '13:00', titulo: 'Festa da escuma', lugar: 'Praza Castelao', icono: '🫧' },
+            { hora: '14:00', titulo: 'Sesión vermú', grupo: 'Eureka', icono: '🍻' },
+            { hora: '16:00', titulo: 'Inchables', lugar: 'Praza Virxe de Guadalupe', icono: '🎈' },
+            { hora: '22:30', titulo: 'Gran Verbena', grupo: 'Eureka · Trébol · Ritmo Xoven', icono: '🎶' },
+            { hora: '23:00', titulo: 'Verbena infantil · Rock infantil', grupo: 'Pakolas e as Tripulantes', lugar: 'Praza da Igrexa', icono: '🎸' },
+            { hora: '00:00', titulo: 'Rianxeira infantil', icono: '🎶' },
+            { hora: '02:00', titulo: 'Gran traca final', grupo: 'Bengalas e Rianxeira', icono: '🎆' },
         ],
     },
 ];

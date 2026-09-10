@@ -121,9 +121,16 @@ export function Itinerario() {
                                             <p className="text-sm text-primary font-semibold mt-1 ml-8 leading-snug">{ev.grupo}</p>
                                         )}
                                         {ev.lugar && (
-                                            <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1 ml-8">
+                                            <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground mt-1 ml-8">
                                                 <MapPin className="w-3 h-3 shrink-0" /> {ev.lugar}
                                             </div>
+                                        )}
+                                        {/* La letra pequeña del cartel: organiza,
+                                            colabora, patrocina… */}
+                                        {ev.nota && (
+                                            <p className="text-[11px] text-muted-foreground/70 mt-0.5 ml-8 leading-snug">
+                                                {ev.nota}
+                                            </p>
                                         )}
                                     </div>
                                     <span className="flex items-center gap-1 text-sm font-mono font-semibold text-primary shrink-0">

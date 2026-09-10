@@ -269,11 +269,14 @@ store Blob). PENDIENTE: confirmar si conviene crear un `.env.example`.
 8. **`@upstash/redis` a veces auto-parsea el JSON** y a veces devuelve string —
    por eso el código repite `typeof raw === 'object' ? raw : JSON.parse(raw)`.
    Mantén ese doble camino en lecturas nuevas.
-9. **`lib/itinerario.ts` son datos, no lógica**: el cartel es el de 2025 y las
-   fechas de 2026 son PROVISIONALES (flag `ITINERARIO_PROVISIONAL = true`).
-   `components/Countdown.tsx` tiene la fecha objetivo **hardcodeada**
-   (`2026-09-12T00:00:00`, hora local del navegador). Si cambian las fechas,
-   hay que tocar los dos sitios.
+9. **`lib/itinerario.ts` son datos, no lógica**: es el PROGRAMA OFICIAL 2026
+   (PDF de la organización, 11-18 de septiembre, 72 actos). Ya no es provisional
+   (`ITINERARIO_PROVISIONAL = false`). Cada acto puede llevar `lugar` (el sitio,
+   sale con chincheta y algún día irá al mapa) y `nota` (la letra pequeña:
+   organiza, colabora, patrocina). La fecha objetivo de la cuenta atrás está
+   **hardcodeada** en `components/Countdown.tsx` (`2026-09-11T22:00:00`, el
+   primer acto) y los cortes de las jornadas de fotos en `lib/festas.ts`: si
+   cambia el cartel hay que tocar los TRES sitios.
 16. **LupeBet:** el boleto oficial son DATOS en `lib/lupebet.ts`, no Redis —
     es el de la camiseta y se copia tal cual, faltas incluidas ("Janador",
     "veses"), que son el chiste. Su cuota total impresa (28,12) NO es el
