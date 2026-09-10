@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { MapPin, Radio, Loader2, Users, Check, Share2, LocateFixed } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { shareLocation, getLocations, removeLocation } from '@/app/actions';
+import { pedirRefresco } from '@/lib/avisos';
 
 // 📍 Recinto da festa: Praza de Castelao (Rianxo). Centro del mapa.
 // Ancla fiable: Concello de Rianxo = 42.65190, -8.81830 (dirección: Praza Castelao).
@@ -286,6 +287,7 @@ export function MapaClient() {
         const ttl = opts.live ? LIVE_WRITE_TTL : durSecs;
         lastPos.current = { lat, lng };
         await shareLocation(id, lat, lng, nombre, color, ttl, opts.live);
+        pedirRefresco(); // que a insignia do menú se entere xa
         if (opts.recenter && mapObj.current) mapObj.current.setView([lat, lng], 17);
         await refreshPoints();
     }, [refreshPoints]);
@@ -299,7 +301,7 @@ export function MapaClient() {
         setShareUntil(null);
         clearSession();
         const id = getAnonId();
-        removeLocation(id).then(refreshPoints);
+        removeLocation(id).then(() => { refreshPoints(); pedirRefresco(); });
         if (msg) setStatus(msg);
     }, [refreshPoints]);
 
@@ -442,7 +444,7 @@ export function MapaClient() {
 
     const stopShare = () => {
         const id = getAnonId();
-        removeLocation(id).then(refreshPoints);
+        removeLocation(id).then(() => { refreshPoints(); pedirRefresco(); });
         setShareUntil(null);
         clearSession();
         setStatus('Deixaches de compartir a túa ubicación.');

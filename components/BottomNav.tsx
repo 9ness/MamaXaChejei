@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { Home, List, MapPin, Images, Ticket, ShieldCheck, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getAvisos } from '@/app/actions';
-import { AVISOS_VACIOS, lerVisto, marcarVisto, publicarAvisos, subscribirAvisos, type Avisos } from '@/lib/avisos';
+import { AVISOS_VACIOS, aoPedirRefresco, lerVisto, marcarVisto, publicarAvisos, subscribirAvisos, type Avisos } from '@/lib/avisos';
 
 interface NavItem {
     href: string;
@@ -72,10 +72,14 @@ export function BottomNav({ isAdmin = false }: { isAdmin?: boolean }) {
         mirar();
         const t = setInterval(mirar, CADA);
         document.addEventListener('visibilitychange', mirar);
+        // Y cuando alguien avisa de que acaba de cambiar algo (compartir la
+        // ubicación, por ejemplo), se mira sin esperar a la siguiente vuelta.
+        const quitar = aoPedirRefresco(mirar);
         return () => {
             vivo = false;
             clearInterval(t);
             document.removeEventListener('visibilitychange', mirar);
+            quitar();
         };
     }, []);
 

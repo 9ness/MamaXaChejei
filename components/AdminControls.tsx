@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { bulkAddMembers, deleteAllMembers } from '@/app/actions';
+import { bulkAddMembers, deleteAllMembers, resetHighScore } from '@/app/actions';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -16,7 +16,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Trash2 } from 'lucide-react';
+import { Trash2, Trophy } from 'lucide-react';
 
 /**
  * Pegar la lista entera de golpe. Ojo: cada línea CREA un registro nuevo, así
@@ -66,10 +66,18 @@ export function BulkUpload() {
     );
 }
 
-/** Vaciar la lista entera. Abajo del todo y en rojo, a propósito. */
+/** Vaciar la lista entera y reiniciar el récord. Abajo del todo y en rojo. */
 export function DangerZone() {
+    const [estado, setEstado] = useState('');
+
     const handleDeleteAll = async () => {
         await deleteAllMembers();
+    };
+
+    const handleResetRecord = async () => {
+        setEstado('');
+        const res = await resetHighScore();
+        setEstado(res?.error ? `❌ ${res.error}` : '✅ Récord a cero.');
     };
 
     return (
@@ -78,6 +86,32 @@ export function DangerZone() {
                 <h3 className="text-sm font-semibold text-red-900 flex items-center gap-2">
                     <Trash2 className="w-4 h-4" /> Zona de Peligro
                 </h3>
+
+                <div className="flex flex-wrap items-center gap-2">
+                    {estado && <span className="text-xs font-medium">{estado}</span>}
+
+                    <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                            <Button variant="outline" size="sm" className="border-red-300 text-red-700 hover:bg-red-100">
+                                <Trophy className="w-4 h-4 mr-1.5" /> Reiniciar récord
+                            </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>¿Poner el récord del juego a cero?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    Se borra la marca y el nombre de quien la tiene. El contador de
+                                    partidas jugadas no se toca. No se puede deshacer.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleResetRecord} className="bg-red-600 hover:bg-red-700">
+                                    Sí, a cero
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
 
                 <AlertDialog>
                     <AlertDialogTrigger asChild>
@@ -101,6 +135,7 @@ export function DangerZone() {
                         </AlertDialogFooter>
                     </AlertDialogContent>
                 </AlertDialog>
+                </div>
             </div>
         </div>
     );

@@ -31,6 +31,21 @@ export function subscribirAvisos(f: () => void) {
     return () => { subscritores.delete(f); };
 }
 
+/**
+ * "Mira agora mismo". Compartir ubicación o dejar de compartir tiene que verse
+ * en la insignia del mapa al momento, no dentro de 45 segundos.
+ */
+const oíntes = new Set<() => void>();
+
+export function aoPedirRefresco(f: () => void) {
+    oíntes.add(f);
+    return () => { oíntes.delete(f); };
+}
+
+export function pedirRefresco() {
+    oíntes.forEach((f) => f());
+}
+
 export function lerAvisos(): Avisos {
     return estado;
 }
