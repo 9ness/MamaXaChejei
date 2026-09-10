@@ -46,6 +46,24 @@ export function Itinerario() {
     // Ojo con los actos a la misma hora (el sábado hay tres a las 20:00): se
     // compara por HORA y no por posición en la lista, que si no solo el último
     // de la tanda salía en curso y los otros dos aparecían como pasados.
+    // Cuándo se da por acabado un acto: cuando empieza el siguiente que sea a
+    // otra hora. El último del día no tiene siguiente, así que se le dan dos
+    // horas de cortesía.
+    const finDe = (i: number) => {
+        for (let j = i + 1; j < times.length; j++) {
+            if (times[j] > times[i]) return times[j];
+        }
+        return times[i] + 2 * 3600_000;
+    };
+
+    /** De 0 a 1: cuánto llevamos del acto. Un 18:00-20:00 a las 19:00 va por 0,5. */
+    const progresoDe = (i: number) => {
+        const ini = times[i];
+        const fin = finDe(i);
+        if (!(fin > ini)) return 1;
+        return Math.min(1, Math.max(0, (now - ini) / (fin - ini)));
+    };
+
     const estadoDe = (i: number): EstadoEvento => {
         if (!esHoxe) return now > dayEnd ? 'pasado' : 'futuro';
         if (nextIdx === -1) return 'pasado';           // día terminado
@@ -95,10 +113,24 @@ export function Itinerario() {
                 {dia.eventos.map((ev, i) => {
                     const estado = estadoDe(i);
                     return (
-                        <li key={i} className="ml-6">
+                        <li key={i} className="relative ml-6">
+                            {/* La línea, que va llenándose. En el acto en curso
+                                llega justo por donde vamos: un 18:00-20:00 a las
+                                19:00 la deja por la mitad del recuadro. */}
+                            {(estado === 'pasado' || estado === 'agora') && (
+                                <span
+                                    aria-hidden
+                                    className="absolute left-[-26px] top-0 w-[2px] bg-primary rounded-full"
+                                    style={
+                                        estado === 'pasado'
+                                            ? { bottom: -24 }   // tapa tamén o oco ata o seguinte
+                                            : { height: `${progresoDe(i) * 100}%` }
+                                    }
+                                />
+                            )}
                             <span
                                 className={cn(
-                                    "absolute -left-[9px] flex items-center justify-center w-4 h-4 rounded-full ring-4 ring-background",
+                                    "absolute -left-[33px] flex items-center justify-center w-4 h-4 rounded-full ring-4 ring-background",
                                     estado === 'agora' && "bg-primary animate-pulse scale-125",
                                     estado === 'proximo' && "bg-primary",
                                     estado === 'pasado' && "bg-slate-300",
