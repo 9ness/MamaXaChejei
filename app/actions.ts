@@ -553,23 +553,21 @@ export interface Foto {
     ts: number;
     /** Pie de foto, opcional: quien sube decide si le pone algo o no. */
     titulo?: string;
-    /** Solo el NOMBRE de quien la subió, para enseñarlo. La identidad de
-     *  verdad (el anonId) vive aparte, en FOTOS_AUTOR_KEY. */
-    autor?: string;
 }
 
-export async function addFoto(url: string, titulo?: string, autor?: string, anonId?: string) {
+// El nombre de quien sube NO se guarda: el mural es anónimo. Lo único que se
+// apunta es el anonId, aparte y en el servidor, para que esa persona pueda
+// borrar su foto (ver FOTOS_AUTOR_KEY).
+export async function addFoto(url: string, titulo?: string, anonId?: string) {
     if (!url || typeof url !== 'string' || !url.startsWith('http')) {
         return { success: false };
     }
     try {
         const pie = (titulo ?? '').replace(/\s+/g, ' ').trim().slice(0, 80);
-        const quen = (autor ?? '').trim().slice(0, 24);
         const foto: Foto = {
             url: url.slice(0, 500),
             ts: Date.now(),
             ...(pie ? { titulo: pie } : {}),
-            ...(quen ? { autor: quen } : {}),
         };
         await redis.lpush(FOTOS_KEY, JSON.stringify(foto));
         await redis.ltrim(FOTOS_KEY, 0, 299); // conserva las últimas 300
@@ -754,7 +752,12 @@ export async function getFotos(): Promise<Foto[]> {
         return raw
             .map((s: string | object) => {
                 try {
-                    return typeof s === 'object' ? (s as Foto) : (JSON.parse(s) as Foto);
+                    const f = (typeof s === 'object' ? s : JSON.parse(s)) as Foto & { autor?: string };
+                    if (!f?.url) return null;
+                    // Se copian los campos a mano: las fotos subidas antes de
+                    // esto llevan dentro el nombre de quien la subió, y el mural
+                    // es anónimo. Así no sale de aquí.
+                    return { url: f.url, ts: f.ts, ...(f.titulo ? { titulo: f.titulo } : {}) } as Foto;
                 } catch {
                     return null;
                 }

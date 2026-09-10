@@ -369,10 +369,7 @@ export function FotosClient({
                     access: 'public',
                     handleUploadUrl: '/api/fotos/upload',
                 });
-                const nome = (() => {
-                    try { return localStorage.getItem('chat_username') || ''; } catch { return ''; }
-                })();
-                await addFoto(blob.url, titulo, nome, getAnonId());
+                await addFoto(blob.url, titulo, getAnonId());
                 done++;
             } catch (err) {
                 // El motivo técnico va á consola; á peña só lle interesa saber
@@ -602,7 +599,6 @@ export function FotosClient({
                                                 </span>
                                             )}
                                             <span className="block text-[11px] text-muted-foreground/80 truncate">
-                                                {f.autor && <span className="font-medium">{f.autor} · </span>}
                                                 <Cando ts={f.ts} />
                                             </span>
                                         </span>

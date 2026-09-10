@@ -320,7 +320,11 @@ store Blob). PENDIENTE: confirmar si conviene crear un `.env.example`.
     CDG1, público). En local NO llega el webhook `onUploadCompleted`, por eso el
     cliente llama además a `addFoto()` con la URL final. Límite 4 MB y solo
     jpeg/png/webp; el cliente comprime a WebP con objetivo de ~220 KB. Cada foto
-    puede llevar un pie opcional (`Foto.titulo`). Los 🔥 van aparte, en
+    puede llevar un pie opcional (`Foto.titulo`) y NO lleva autor: el mural es
+    anónimo. Quién subió cada una se guarda solo en `fiesta:fotos_autor`
+    (fotoId → anonId), que nunca sale al cliente y solo sirve para que esa
+    persona pueda borrarla; `getFotos` copia campo a campo para que el nombre de
+    las fotos antiguas tampoco salga. Los 🔥 van aparte, en
     `fiesta:fotos_likes` (contador) + `fiesta:fotos_like_de:<anonId>` (SET), y la
     identidad de una foto es el nombre del fichero en Blob (`lib/fotos.ts`), no
     un id propio: así funciona también con las fotos viejas.
