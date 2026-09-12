@@ -44,3 +44,4 @@
 - LupeBet: cuota fija = mercado muerto. Se mueve con el dinero en log-odds (no en probabilidad lineal: con una cuota de 26, 25 moedas la partían por la mitad de golpe) y se congela al apostar, que es lo que hacen las casas de verdad.
 - OG de LupeBet: con `justifyContent: center` y `overflow: hidden`, Satori recorta por ARRIBA sin avisar. Las alturas (cabecera, pie, filas) hay que repartirlas a mano y sacar el padding de lo que sobra, no fijarlo.
 - Los sitios del cartel no tienen coordenada consultable en ningún sitio: en vez de pedirlas a mano, el admin las pone tocando el mapa (`fiesta:lugares`); el emoji va por paleta cerrada porque se inyecta en el HTML del marcador de Leaflet.
+- Audio en el móvil: para SUBIR un fichero basta MP3 (suena en todo); lo que no es trivial es GRABAR, porque Chrome da WebM y Safari MP4 y no se reproducen cruzados. Y el gasto de los audios es el ancho de banda, no el almacenamiento: `preload="none"` es lo que lo evita.

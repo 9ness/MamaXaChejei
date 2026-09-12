@@ -1,12 +1,14 @@
 import { Header } from '@/components/Header';
-import { FotosClient } from '@/components/FotosClient';
-import { getFotos, getLikes } from '@/app/actions';
+import { RecuerdosTabs } from '@/components/RecuerdosTabs';
+import { getAudios, getFotos, getLikes } from '@/app/actions';
 import { isAdmin } from '@/lib/admin-auth';
 
 export const dynamic = 'force-dynamic';
 
 export default async function RecuerdosPage() {
-    const [fotos, likes, admin] = await Promise.all([getFotos(), getLikes(), isAdmin()]);
+    const [fotos, likes, audios, admin] = await Promise.all([
+        getFotos(), getLikes(), getAudios(), isAdmin(),
+    ]);
 
     return (
         <main className="min-h-screen bg-gray-50/50 dark:bg-zinc-950">
@@ -18,11 +20,11 @@ export default async function RecuerdosPage() {
                         📸 Recordos
                     </h1>
                     <p className="text-sm text-muted-foreground mt-1">
-                        O mural da peña. Sube as túas fotos e compárteas con todos.
+                        O mural da peña. Sube as túas fotos e as cancións que saian.
                     </p>
                 </div>
 
-                <FotosClient initialFotos={fotos} initialLikes={likes} isAdmin={admin} />
+                <RecuerdosTabs fotos={fotos} likes={likes} audios={audios} isAdmin={admin} />
             </div>
         </main>
     );

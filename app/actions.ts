@@ -882,6 +882,138 @@ export async function getLocations(): Promise<MapPoint[]> {
     }
 }
 
+// --- AUDIOS DA PEÑA ---
+// Mesmo molde que as fotos: LIST de JSON + HASH co dono para que cada quen
+// poida borrar o seu. A diferenza é que aquí o título NON é opcional (unha
+// canción sen nome nunha lista non lle di nada a ninguén) e que se garda a URL
+// de descarga que devolve Blob, que é a que obriga ao navegador a gardar o
+// ficheiro en vez de poñerse a reproducilo.
+
+const AUDIOS_KEY = `${NAMESPACE}:audios`;
+const AUDIOS_AUTOR_KEY = `${NAMESPACE}:audios_autor`;
+const AUDIOS_MAX = 99;   // son cancións, non fotos: con cen vai sobrado
+
+export interface AudioPena {
+    url: string;
+    ts: number;
+    titulo: string;
+    /** URL que forza a descarga (a que devolve Blob ao subir). */
+    descarga?: string;
+}
+
+export async function getAudios(): Promise<AudioPena[]> {
+    noStore();
+    try {
+        const raw = await redis.lrange(AUDIOS_KEY, 0, AUDIOS_MAX);
+        return raw
+            .map((s: string | object) => {
+                try {
+                    return typeof s === 'object' ? (s as AudioPena) : (JSON.parse(s) as AudioPena);
+                } catch {
+                    return null;
+                }
+            })
+            // Campo a campo, como en getFotos: así non se escapa nada que se
+            // gardase de máis nalgún momento.
+            .filter((a): a is AudioPena => Boolean(a && a.url))
+            .map(a => ({
+                url: a.url,
+                ts: a.ts,
+                titulo: a.titulo || 'Sen título',
+                ...(a.descarga ? { descarga: a.descarga } : {}),
+            }));
+    } catch {
+        return [];
+    }
+}
+
+export async function addAudio(url: string, titulo: string, anonId?: string, descarga?: string) {
+    if (!url || typeof url !== 'string' || !url.startsWith('http')) {
+        return { success: false };
+    }
+    try {
+        const nome = (titulo ?? '').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Sen título';
+        const audio: AudioPena = {
+            url: url.slice(0, 500),
+            ts: Date.now(),
+            titulo: nome,
+            ...(descarga && descarga.startsWith('http') ? { descarga: descarga.slice(0, 500) } : {}),
+        };
+        await redis.lpush(AUDIOS_KEY, JSON.stringify(audio));
+        await redis.ltrim(AUDIOS_KEY, 0, AUDIOS_MAX);
+
+        const dono = limpiaAnonId(anonId);
+        const id = fotoId(audio.url);   // é o nome do ficheiro en Blob, vale igual
+        if (dono && id) await redis.hset(AUDIOS_AUTOR_KEY, { [id]: dono });
+        revalidatePath('/recuerdos');
+        return { success: true };
+    } catch {
+        return { success: false };
+    }
+}
+
+/** Borrar un audio: o admin, calquera; o resto, só os seus. */
+export async function deleteAudio(url: string, anonId?: string): Promise<{ success?: true; error?: string }> {
+    const id = fotoId(url);
+    if (!id) return { error: 'Audio non válido.' };
+
+    try {
+        const admin = await isAdminRequest();
+        if (!admin) {
+            const dono = limpiaAnonId(anonId);
+            const gardado = await redis.hget<string>(AUDIOS_AUTOR_KEY, id);
+            if (!dono || !gardado || String(gardado) !== dono) {
+                return { error: 'Ese audio non é teu.' };
+            }
+        }
+
+        const raw = await redis.lrange(AUDIOS_KEY, 0, AUDIOS_MAX);
+        const quedan = raw
+            .map((s: string | object) => {
+                try {
+                    return typeof s === 'object' ? (s as AudioPena) : (JSON.parse(s) as AudioPena);
+                } catch {
+                    return null;
+                }
+            })
+            .filter((a): a is AudioPena => Boolean(a && a.url && fotoId(a.url) !== id));
+
+        await redis.del(AUDIOS_KEY);
+        if (quedan.length > 0) {
+            await redis.rpush(AUDIOS_KEY, ...quedan.map((a) => JSON.stringify(a)));
+        }
+        await redis.hdel(AUDIOS_AUTOR_KEY, id);
+
+        try {
+            const { del } = await import('@vercel/blob');
+            await del(url);
+        } catch {
+            // sen token ou xa borrado: non rompe o borrado da lista
+        }
+
+        revalidatePath('/recuerdos');
+        return { success: true };
+    } catch {
+        return { error: 'Non se puido borrar o audio.' };
+    }
+}
+
+/** Que audios subiu ESTE móbil, para ensinarlle a el a papeleira. */
+export async function getMeusAudios(anonId: string): Promise<string[]> {
+    noStore();
+    const dono = limpiaAnonId(anonId);
+    if (!dono) return [];
+    try {
+        const todo = await redis.hgetall<Record<string, string>>(AUDIOS_AUTOR_KEY);
+        if (!todo) return [];
+        return Object.entries(todo)
+            .filter(([, v]) => String(v) === dono)
+            .map(([k]) => k);
+    } catch {
+        return [];
+    }
+}
+
 // --- SITIOS DA FESTA (as chinchetas fixas do mapa) ---
 // Os NOMES son datos do cartel (lib/lugares.ts). O que se garda aquí é só
 // ONDE cae cada un e con que icona: colócao o admin tocando no mapa, porque

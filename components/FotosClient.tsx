@@ -6,7 +6,7 @@ import { addFoto, deleteFoto, getFotos, getMeusLikes, getMinasFotos, toggleLike,
 import { getAnonId } from '@/lib/anon-id';
 import { fotoId } from '@/lib/fotos';
 import { DIAS_FESTA, diaDaFoto } from '@/lib/festas';
-import { fai } from '@/lib/tempo';
+import { Cando } from '@/components/Cando';
 import { Button } from '@/components/ui/button';
 import { Camera, Flame, ImagePlus, Loader2, Trash2, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -76,27 +76,6 @@ async function comprimir(file: File): Promise<File> {
     } finally {
         bitmap.close?.();
     }
-}
-
-/**
- * Cuándo se subió: "fai 38 minutos", y de una semana en adelante, la fecha.
- * Se calcula DESPUÉS de montar, no en el render: el servidor y el móvil no
- * tienen por qué coincidir en la hora y saldría un aviso de hidratación.
- */
-function Cando({ ts, claro = false }: { ts: number; claro?: boolean }) {
-    const [texto, setTexto] = useState('');
-
-    useEffect(() => {
-        const pinta = () => setTexto(fai(ts, Date.now()));
-        pinta();
-        // Cada minuto, para que "agora mesmo" no se quede clavado si la pestaña
-        // se queda abierta toda la fiesta.
-        const t = setInterval(pinta, 60_000);
-        return () => clearInterval(t);
-    }, [ts]);
-
-    if (!texto) return null;
-    return <span className={claro ? 'text-white/60' : ''}>{texto}</span>;
 }
 
 /**

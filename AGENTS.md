@@ -106,7 +106,7 @@ app/
   lupebet/[id]/page.tsx       # ficha de un boleto (URL propia para compartir)
   api/og/lupebet/route.tsx    # imagen del boleto (la que se comparte)
   api/chat/route.ts   # GET/POST/DELETE/PATCH del chat (pin, unpin, react)
-  api/fotos/upload/route.ts   # handleUpload de Vercel Blob (subida directa cliente)
+  api/fotos/upload/route.ts   # handleUpload de Vercel Blob (fotos Y audios)
   api/debug/reset-score/route.ts  # ⚠️ reset del récord por GET, SIN AUTH
   globals.css         # variables CSS de shadcn (light/dark)
 components/
@@ -164,6 +164,8 @@ public/               # sprites del juego (man*.png, ~2 MB cada uno)
 | `fiesta:chat_n` | STRING | contador INCR de mensajes publicados (insignia del chat) |
 | `fiesta:fotos_likes` | HASH | fotoId → nº de 🔥 |
 | `fiesta:fotos_like_de:<anonId>` | SET | fotos que marcó ese móvil |
+| `fiesta:audios` | LIST | cancións da peña (JSON `{url, ts, titulo, descarga?}`, LTRIM 0 99) |
+| `fiesta:audios_autor` | HASH | audioId → anonId (solo servidor, para poder borrarlo) |
 | `fiesta:loc:<anonId>` | STRING + TTL | punto del mapa (15/30/60 min o directo) |
 | `fiesta:loc_ids` | SET | índice de puntos (se auto-limpia al leer caducados) |
 | `fiesta:lugares` | HASH | id do sitio → `{lat,lng,emoji}` (colócaos o admin no mapa) |
@@ -332,7 +334,16 @@ store Blob). PENDIENTE: confirmar si conviene crear un `.env.example`.
     las fotos antiguas tampoco salga. Los 🔥 van aparte, en
     `fiesta:fotos_likes` (contador) + `fiesta:fotos_like_de:<anonId>` (SET), y la
     identidad de una foto es el nombre del fichero en Blob (`lib/fotos.ts`), no
-    un id propio: así funciona también con las fotos viejas.
+    un id propio: así funciona también con las fotos viejas. **Los audios**
+    (`fiesta:audios`, sección Audios dentro de `/recuerdos`) son el mismo molde:
+    misma ruta de subida (`audios/` en vez de `fotos/`, tope 12 MB, solo MP3 y
+    AAC/M4A porque son los que suenan en Android y iPhone sin convertir) y mismo
+    borrado por `anonId`. NO se comprimen en el móvil: una canción ya viene
+    codificada. En el mural van con `preload="none"` a propósito: el ancho de
+    banda es lo que se paga, no el almacenamiento, y sin eso abrir la página
+    bajaría todas las canciones enteras. El botón de descarga usa el
+    `downloadUrl` que devuelve Blob al subir (fuerza guardar en vez de
+    reproducir); se guarda en `descarga` porque no se puede reconstruir sin él.
 12. **`components.json` declara `tailwind.config: ""`** aunque existe
     `tailwind.config.js` (Tailwind **3.4**, no 4). Si añades componentes shadcn
     con la CLI, revisa que no te reescriba la config ni el `globals.css`.

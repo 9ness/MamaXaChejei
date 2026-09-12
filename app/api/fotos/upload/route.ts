@@ -13,8 +13,17 @@ export const dynamic = 'force-dynamic';
 const MAX_SUBIDAS = 500;
 const VENTANA_S = 60 * 60; // 1 hora
 
-// El cliente sube siempre a `fotos/foto-<ts>.jpg` (ver comprimir() en FotosClient).
-const RUTA_PERMITIDA = /^fotos\/[A-Za-z0-9._-]+$/;
+// El cliente sube a `fotos/foto-<ts>.jpg` (ver comprimir() en FotosClient) o a
+// `audios/audio-<ts>.mp3` (AudiosClient). Nada más.
+const RUTA_PERMITIDA = /^(fotos|audios)\/[A-Za-z0-9._-]+$/;
+
+// Los audios no se comprimen en el móvil (una canción ya viene en MP3), así que
+// llevan su propio tope: 12 MB dan para ~12 min a 128 kbps, de sobra.
+const TIPOS_FOTO = ['image/jpeg', 'image/png', 'image/webp'];
+// MP3 y AAC/M4A: son los dos que suenan en Android y en iPhone sin convertir.
+const TIPOS_AUDIO = ['audio/mpeg', 'audio/mp4', 'audio/x-m4a', 'audio/aac'];
+const MAX_FOTO = 4_000_000;
+const MAX_AUDIO = 12_000_000;
 
 // Autoriza la subida directa del cliente a Vercel Blob.
 // Requiere la variable de entorno BLOB_READ_WRITE_TOKEN (se inyecta sola
@@ -43,9 +52,10 @@ export async function POST(request: Request): Promise<NextResponse> {
                 if (!RUTA_PERMITIDA.test(pathname)) {
                     throw new Error('Ruta no permitida');
                 }
+                const esAudio = pathname.startsWith('audios/');
                 return {
-                    allowedContentTypes: ['image/jpeg', 'image/png', 'image/webp'],
-                    maximumSizeInBytes: 4_000_000, // 4 MB (ya vienen comprimidas del cliente)
+                    allowedContentTypes: esAudio ? TIPOS_AUDIO : TIPOS_FOTO,
+                    maximumSizeInBytes: esAudio ? MAX_AUDIO : MAX_FOTO,
                     addRandomSuffix: true,
                 };
             },
