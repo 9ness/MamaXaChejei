@@ -2,15 +2,19 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { upload } from '@vercel/blob/client';
-import { addAudio, deleteAudio, getAudios, getMeusAudios, type AudioPena } from '@/app/actions';
+import {
+    addAudio, deleteAudio, getAudios, getMeusAudios, getMeusLikesAudios,
+    toggleLikeAudio, type AudioPena,
+} from '@/app/actions';
 import { getAnonId } from '@/lib/anon-id';
 import { fotoId } from '@/lib/fotos';
 import { Cando } from '@/components/Cando';
+import { BotonLume } from '@/components/BotonLume';
 import { DIAS_FESTA, diaDaFoto } from '@/lib/festas';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
-    ArrowDownAZ, CalendarDays, Clock, Download, Headphones, Loader2,
+    ArrowDownAZ, CalendarDays, Clock, Download, Flame, Headphones, Loader2,
     Music, Share2, Trash2, Upload, X,
 } from 'lucide-react';
 
@@ -38,9 +42,11 @@ function tamano(bytes: number): string {
 
 export function AudiosClient({
     initialAudios,
+    initialLikes = {},
     isAdmin = false,
 }: {
     initialAudios: AudioPena[];
+    initialLikes?: Record<string, number>;
     isAdmin?: boolean;
 }) {
     const [audios, setAudios] = useState<AudioPena[]>(initialAudios);
@@ -48,8 +54,15 @@ export function AudiosClient({
     // O mesmo xogo de filtros que o mural, pero co seu propio estado: cambiar
     // de pestana non ten por que revolver o que estabas mirando na outra.
     // Aquí non hai 🔥, así que ese oco válo o abecedario.
-    const [orde, setOrde] = useState<'data' | 'nome' | 'dias'>('data');
+    const [orde, setOrde] = useState<'data' | 'likes' | 'nome' | 'dias'>('data');
     const [dia, setDia] = useState<string | null>(null);
+
+    // Os 🔥. Mesmo trato ca no mural: os contadores veñen do servidor e o que
+    // marcou ESTE móbil pídese ao montar.
+    const [likes, setLikes] = useState<Record<string, number>>(initialLikes);
+    const [meusLikes, setMeusLikes] = useState<Set<string>>(new Set());
+    const [arde, setArde] = useState<string | null>(null);
+    const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [pendente, setPendente] = useState<File | null>(null);
     const [titulo, setTitulo] = useState('');
     const [busy, setBusy] = useState(false);
@@ -59,8 +72,47 @@ export function AudiosClient({
 
     // Cales subiu este móbil: son os únicos que pode borrar (ademais do admin).
     useEffect(() => {
-        getMeusAudios(getAnonId()).then(setMeus).catch(() => { });
+        const eu = getAnonId();
+        getMeusAudios(eu).then(setMeus).catch(() => { });
+        getMeusLikesAudios(eu).then((ids) => setMeusLikes(new Set(ids))).catch(() => { });
+        return () => {
+            if (temporizador.current) clearTimeout(temporizador.current);
+        };
     }, []);
+
+    /** Optimista: o 🔥 responde ao momento e desfaise se o servidor di outra cousa. */
+    const darLike = async (a: AudioPena) => {
+        const id = fotoId(a.url);
+        if (!id) return;
+
+        const tinao = meusLikes.has(id);
+        if (!tinao) {
+            setArde(id);
+            if (temporizador.current) clearTimeout(temporizador.current);
+            temporizador.current = setTimeout(() => setArde(null), 900);
+        }
+        setMeusLikes((prev) => {
+            const s = new Set(prev);
+            if (tinao) s.delete(id); else s.add(id);
+            return s;
+        });
+        setLikes((prev) => ({ ...prev, [id]: Math.max(0, (prev[id] ?? 0) + (tinao ? -1 : 1)) }));
+
+        const res = await toggleLikeAudio(getAnonId(), id);
+        if (res.error) {
+            setMeusLikes((prev) => {
+                const s = new Set(prev);
+                if (tinao) s.add(id); else s.delete(id);
+                return s;
+            });
+            setLikes((prev) => ({ ...prev, [id]: Math.max(0, (prev[id] ?? 0) + (tinao ? 1 : -1)) }));
+            setError(res.error);
+            return;
+        }
+        if (typeof res.likes === 'number') {
+            setLikes((prev) => ({ ...prev, [id]: res.likes as number }));
+        }
+    };
 
     const escoller = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -160,7 +212,13 @@ export function AudiosClient({
     // Nada de Date.now() aquí: o render ten que dar sempre o mesmo.
     const diaActivo = dia ?? (audios.length > 0 ? diaDaFoto(audios[0].ts) : DIAS_FESTA[0].id);
 
-    const listados = orde === 'nome'
+    const listados = orde === 'likes'
+        ? [...audios].sort((a, b) => {
+            const da = likes[fotoId(a.url)] ?? 0;
+            const db = likes[fotoId(b.url)] ?? 0;
+            return db - da || b.ts - a.ts;
+        })
+        : orde === 'nome'
         ? [...audios].sort((a, b) => a.titulo.localeCompare(b.titulo, 'gl') || b.ts - a.ts)
         : orde === 'dias'
             ? audios.filter((a) => diaDaFoto(a.ts) === diaActivo)
@@ -230,6 +288,7 @@ export function AudiosClient({
                         <div className="flex justify-center gap-1.5 flex-wrap">
                             {([
                                 { v: 'data' as const, label: 'Recentes', Icon: Clock },
+                                { v: 'likes' as const, label: 'Gustadas', Icon: Flame },
                                 { v: 'nome' as const, label: 'Nome', Icon: ArrowDownAZ },
                                 { v: 'dias' as const, label: 'Por días', Icon: CalendarDays },
                             ]).map(({ v, label, Icon }) => (
@@ -345,6 +404,16 @@ export function AudiosClient({
                                         >
                                             <Share2 className="w-4 h-4 shrink-0" /> Compartir
                                         </button>
+                                        {/* O mesmo botón do mural, coas mesmas llamitas: aquí
+                                            conta cancións. */}
+                                        <span className="h-9 inline-flex items-center">
+                                            <BotonLume
+                                                n={likes[fotoId(a.url)] ?? 0}
+                                                meu={meusLikes.has(fotoId(a.url))}
+                                                arde={arde === fotoId(a.url)}
+                                                onClick={() => darLike(a)}
+                                            />
+                                        </span>
                                     </div>
                                 </li>
                                 );

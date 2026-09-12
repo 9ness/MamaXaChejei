@@ -17,11 +17,13 @@ export function RecuerdosTabs({
     fotos,
     likes,
     audios,
+    likesAudios,
     isAdmin = false,
 }: {
     fotos: Foto[];
     likes: Record<string, number>;
     audios: AudioPena[];
+    likesAudios: Record<string, number>;
     isAdmin?: boolean;
 }) {
     const [tab, setTab] = useState<'fotos' | 'audios'>('fotos');
@@ -58,7 +60,7 @@ export function RecuerdosTabs({
 
             {tab === 'fotos'
                 ? <FotosClient initialFotos={fotos} initialLikes={likes} isAdmin={isAdmin} />
-                : <AudiosClient initialAudios={audios} isAdmin={isAdmin} />}
+                : <AudiosClient initialAudios={audios} initialLikes={likesAudios} isAdmin={isAdmin} />}
         </div>
     );
 }

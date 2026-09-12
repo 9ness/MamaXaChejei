@@ -891,6 +891,11 @@ export async function getLocations(): Promise<MapPoint[]> {
 
 const AUDIOS_KEY = `${NAMESPACE}:audios`;
 const AUDIOS_AUTOR_KEY = `${NAMESPACE}:audios_autor`;
+// Os 🔥 dos audios van nas SÚAS keys e non nas das fotos: as dúas cousas
+// identifícanse polo nome do ficheiro en Blob e mesturalas sería pedir que
+// algún día unha canción e unha foto compartan contador.
+const AUDIOS_LIKES_KEY = `${NAMESPACE}:audios_likes`;        // HASH audioId -> nº
+const AUDIOS_LIKES_DE = `${NAMESPACE}:audios_like_de:`;      // SET por dispositivo
 const AUDIOS_MAX = 99;   // son cancións, non fotos: con cen vai sobrado
 
 export interface AudioPena {
@@ -983,6 +988,7 @@ export async function deleteAudio(url: string, anonId?: string): Promise<{ succe
             await redis.rpush(AUDIOS_KEY, ...quedan.map((a) => JSON.stringify(a)));
         }
         await redis.hdel(AUDIOS_AUTOR_KEY, id);
+        await redis.hdel(AUDIOS_LIKES_KEY, id);
 
         try {
             const { del } = await import('@vercel/blob');
@@ -995,6 +1001,73 @@ export async function deleteAudio(url: string, anonId?: string): Promise<{ succe
         return { success: true };
     } catch {
         return { error: 'Non se puido borrar o audio.' };
+    }
+}
+
+/** Cantos 🔥 ten cada canción. Unha soa lectura para toda a sección. */
+export async function getLikesAudios(): Promise<Record<string, number>> {
+    noStore();
+    try {
+        const raw = await redis.hgetall<Record<string, string | number>>(AUDIOS_LIKES_KEY);
+        if (!raw) return {};
+        const salida: Record<string, number> = {};
+        for (const [id, v] of Object.entries(raw)) {
+            const n = Number(v) || 0;
+            if (n > 0) salida[id] = n;
+        }
+        return salida;
+    } catch {
+        return {};
+    }
+}
+
+/** A cales lles deu 🔥 ESTE móbil. */
+export async function getMeusLikesAudios(anonId: string): Promise<string[]> {
+    noStore();
+    const id = limpiaAnonId(anonId);
+    if (!id) return [];
+    try {
+        const ids = await redis.smembers(`${AUDIOS_LIKES_DE}${id}`);
+        return (ids ?? []).map(String);
+    } catch {
+        return [];
+    }
+}
+
+export async function toggleLikeAudio(
+    anonId: string,
+    audioId: string,
+): Promise<{ liked?: boolean; likes?: number; error?: string }> {
+    const id = limpiaAnonId(anonId);
+    if (!id) return { error: 'Non se puido identificar o dispositivo.' };
+    if (!/^[A-Za-z0-9._-]{1,120}$/.test(audioId)) return { error: 'Audio non válido.' };
+
+    const ip = clientIpFromHeaders(await headers());
+    if (await rateLimited('like', ip, 600, 60 * 60)) {
+        return { error: 'Demasiados toques seguidos.' };
+    }
+
+    try {
+        // Mesmo baile ca nas fotos: o SET do dispositivo manda, e o contador
+        // vai detrás. Así dous toques seguidos non poden sumar dous.
+        const key = `${AUDIOS_LIKES_DE}${id}`;
+        const engadido = await redis.sadd(key, audioId);
+
+        let likes: number;
+        if (engadido) {
+            likes = await redis.hincrby(AUDIOS_LIKES_KEY, audioId, 1);
+        } else {
+            await redis.srem(key, audioId);
+            likes = await redis.hincrby(AUDIOS_LIKES_KEY, audioId, -1);
+            if (likes < 0) {
+                await redis.hset(AUDIOS_LIKES_KEY, { [audioId]: 0 });
+                likes = 0;
+            }
+        }
+
+        return { liked: Boolean(engadido), likes };
+    } catch {
+        return { error: 'Non se puido gardar.' };
     }
 }
 
