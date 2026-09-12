@@ -410,8 +410,10 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
                     </div>
                 </div>
 
-                {/* HUD */}
-                <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-start z-50 pointer-events-none">
+                {/* HUD. O xogo vai a pantalla completa: en iPhone o notch e a
+                    illa dinámica comen esta franxa, así que a marca de arriba
+                    sae do inset seguro (en Android eses insets son 0). */}
+                <div className="absolute top-0 left-0 right-0 p-4 pt-[calc(1rem+env(safe-area-inset-top))] flex justify-between items-start z-50 pointer-events-none">
                     <div className="flex flex-col pointer-events-auto">
                         <span className="text-5xl font-black text-white drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)] font-mono tracking-wider">
                             {gameState.score}
@@ -428,7 +430,7 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
                     variant="ghost"
                     size="icon"
                     onClick={onClose}
-                    className="absolute top-4 right-4 z-[90] text-white hover:bg-white/20 rounded-full h-12 w-12 bg-black/20 backdrop-blur pointer-events-auto"
+                    className="absolute top-[calc(1rem+env(safe-area-inset-top))] right-4 z-[90] text-white hover:bg-white/20 rounded-full h-12 w-12 bg-black/20 backdrop-blur pointer-events-auto"
                 >
                     <X size={28} />
                 </Button>

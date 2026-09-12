@@ -268,7 +268,7 @@ export function GlobalChat() {
     return (
         <>
             {!isOpen && (
-                <div className="fixed bottom-20 right-4 md:bottom-6 md:right-6 z-50">
+                <div className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-4 md:bottom-6 md:right-6 z-50">
                     <Button
                         onClick={() => setIsOpen(true)}
                         className="relative h-12 w-12 rounded-full shadow-xl bg-primary hover:scale-105 transition-all animate-in zoom-in opacity-80 hover:opacity-100"
@@ -285,13 +285,16 @@ export function GlobalChat() {
             )}
 
             {isOpen && (
-                <div className="fixed bottom-20 left-1/2 -translate-x-1/2 w-[90vw] max-w-[380px] md:left-auto md:translate-x-0 md:bottom-6 md:right-6 md:w-[400px] h-[600px] max-h-[80vh] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col z-50 animate-in slide-in-from-bottom-5 overflow-hidden font-sans">
-                    {/* Header */}
-                    <div className="p-3 bg-gradient-to-r from-[hsl(var(--pena-from))] to-[hsl(var(--pena-to))] text-white flex justify-between items-center shadow-md z-10 shrink-0">
-                        <div>
-                            <h3 className="font-bold flex items-center gap-2 text-sm">
+                <div className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 w-[90vw] max-w-[380px] md:left-auto md:translate-x-0 md:bottom-6 md:right-6 md:w-[400px] h-[600px] max-h-[80dvh] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col z-50 animate-in slide-in-from-bottom-5 overflow-hidden font-sans">
+                    {/* Header. Os botóns van na súa propia columna e NON en
+                        absolute por riba do título: en iPhone os emoji son máis
+                        anchos que en Android, o título medraba ata debaixo deles
+                        e víanse cortados. */}
+                    <div className="p-3 bg-gradient-to-r from-[hsl(var(--pena-from))] to-[hsl(var(--pena-to))] text-white flex justify-between items-start gap-2 shadow-md z-10 shrink-0">
+                        <div className="min-w-0 flex-1">
+                            <h3 className="font-bold text-sm leading-snug">
                                 Mamá, xa chejei. 🍻🙅‍♀️💁‍♀️🎉
-                                {isAdmin && <span className="text-[9px] bg-white/20 px-1 rounded">ADMIN</span>}
+                                {isAdmin && <span className="ml-2 align-middle text-[9px] bg-white/20 px-1 rounded">ADMIN</span>}
                             </h3>
                             <div className="flex flex-wrap gap-2 mt-1 items-center">
                                 {headerHighScore && (
@@ -300,34 +303,35 @@ export function GlobalChat() {
                                     </div>
                                 )}
                                 <div className="text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded-full font-bold shadow-sm flex items-center gap-1 border border-emerald-400 cursor-default">
-                                    <span className="text-lg leading-none"></span> {totalGames} veces xogado
+                                    🎲 {totalGames} veces xogado
                                 </div>
                             </div>
                             <div className="text-[10px] bg-white/10 mt-2 px-2 py-0.5 rounded text-white/90 w-fit font-medium">
                                 {headerStatus}
                             </div>
                         </div>
-                    </div>
-                    <div className="absolute top-1 right-3 flex gap-1 z-20">
-                        {/* Con el mando a secas nadie sabía que había un juego:
-                            va con la palabra al lado. */}
-                        <button
-                            onClick={() => setShowGame(true)}
-                            className="flex items-center gap-1 h-8 pl-2 pr-2.5 rounded-full bg-white/20 hover:bg-white/30 transition-colors text-white text-[11px] font-bold"
-                            title="Xogar ao xogo das cervexas"
-                        >
-                            <span className="text-base leading-none">🎮</span> Xoga
-                        </button>
-                        <button
-                            onClick={() => { setRanking([]); getRankingXogo(5).then(setRanking); }}
-                            className="flex items-center justify-center h-8 w-8 rounded-full hover:bg-white/20 transition-colors text-white"
-                            title="Ranking do xogo"
-                        >
-                            <span className="text-base leading-none">🏆</span>
-                        </button>
-                        <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)} className="hover:bg-white/10 rounded-full h-8 w-8 text-white">
-                            <X className="h-5 w-5" />
-                        </Button>
+
+                        <div className="flex gap-1 shrink-0">
+                            {/* Con el mando a secas nadie sabía que había un juego:
+                                va con la palabra al lado. */}
+                            <button
+                                onClick={() => setShowGame(true)}
+                                className="flex items-center gap-1 h-8 pl-2 pr-2.5 rounded-full bg-white/20 hover:bg-white/30 transition-colors text-white text-[11px] font-bold shrink-0"
+                                title="Xogar ao xogo das cervexas"
+                            >
+                                <span className="text-base leading-none">🎮</span> Xoga
+                            </button>
+                            <button
+                                onClick={() => { setRanking([]); getRankingXogo(5).then(setRanking); }}
+                                className="flex items-center justify-center h-8 w-8 rounded-full hover:bg-white/20 transition-colors text-white shrink-0"
+                                title="Ranking do xogo"
+                            >
+                                <span className="text-base leading-none">🏆</span>
+                            </button>
+                            <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)} className="hover:bg-white/10 rounded-full h-8 w-8 text-white shrink-0">
+                                <X className="h-5 w-5" />
+                            </Button>
+                        </div>
                     </div>
 
                     {/* Ranking del juego: se pide al abrirlo, un solo comando. */}
@@ -537,7 +541,7 @@ export function GlobalChat() {
                         {showScrollButton && (
                             <Button
                                 onClick={() => scrollToBottom(true)}
-                                className="fixed bottom-24 right-8 z-50 rounded-full h-10 w-10 bg-indigo-600 hover:bg-indigo-700 shadow-lg animate-in zoom-in"
+                                className="fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] right-8 z-50 rounded-full h-10 w-10 bg-indigo-600 hover:bg-indigo-700 shadow-lg animate-in zoom-in"
                                 size="icon"
                             >
                                 <ArrowDown className="h-5 w-5 text-white" />
