@@ -25,11 +25,9 @@ export async function Header({ variant = 'full' }: HeaderProps) {
                 </h2>
             </div>
 
-            {!isCompact && (
-                <div className="py-4">
-                    <Countdown />
-                </div>
-            )}
+            {/* O contador desaparece só cando xa pasou a hora (ver Countdown),
+                así que o aire vertical vai dentro del e non neste oco. */}
+            {!isCompact && <Countdown />}
 
             <div className="mb-4">
                 <AnnouncementBanner />
