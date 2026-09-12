@@ -1,9 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { ITINERARIO, ITINERARIO_PROVISIONAL, type ItinerarioDia } from '@/lib/itinerario';
+import { buscarLugar, mapaUrl, mapsUrl, type LugaresGardados } from '@/lib/lugares';
 import { cn } from '@/lib/utils';
-import { CalendarDays, MapPin, Clock } from 'lucide-react';
+import { CalendarDays, MapPin, Clock, Map as MapIcon, Navigation } from 'lucide-react';
 
 type EstadoEvento = 'pasado' | 'agora' | 'proximo' | 'futuro';
 
@@ -16,7 +18,50 @@ function eventoDate(dia: ItinerarioDia, hora: string): number {
     return date.getTime();
 }
 
-export function Itinerario() {
+/** Cando se dá por rematada unha xornada: dúas horas despois do último acto. */
+function finDoDia(d: ItinerarioDia): number {
+    return eventoDate(d, d.eventos[d.eventos.length - 1].hora) + 2 * 3600_000;
+}
+
+/**
+ * O sitio dun acto. Se xa sabemos onde cae (lib/lugares.ts ten as coordenadas)
+ * o propio nome é o botón que leva ao mapa da web, e ao lado vai un "Ir" para
+ * Google Maps. Mentres non teña coordenadas queda como estaba: só texto.
+ */
+function Lugar({ texto, lugares }: { texto: string; lugares: LugaresGardados }) {
+    const lugar = buscarLugar(texto, lugares);
+
+    if (!lugar) {
+        return (
+            <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground mt-1 ml-8">
+                <MapPin className="w-3 h-3 shrink-0" /> {texto}
+            </div>
+        );
+    }
+
+    return (
+        <div className="flex flex-wrap items-center gap-1.5 mt-2 ml-8">
+            <Link
+                href={mapaUrl(lugar)}
+                className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/5 pl-2 pr-2.5 py-1 text-xs font-semibold text-primary transition-transform active:scale-95"
+            >
+                <MapIcon className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate max-w-[190px]">{texto}</span>
+            </Link>
+            <a
+                href={mapsUrl(lugar)}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Ir a ${texto} con Google Maps`}
+                className="inline-flex items-center gap-1 rounded-full border border-slate-200 dark:border-slate-700 bg-card px-2.5 py-1 text-xs font-semibold text-muted-foreground transition-transform active:scale-95"
+            >
+                <Navigation className="w-3.5 h-3.5 shrink-0" /> Ir
+            </a>
+        </div>
+    );
+}
+
+export function Itinerario({ lugares = {} }: { lugares?: LugaresGardados }) {
     const [now, setNow] = useState<number | null>(null);
     const [activeIdx, setActiveIdx] = useState(0);
 
@@ -90,6 +135,10 @@ export function Itinerario() {
             <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 mb-6 snap-x">
                 {ITINERARIO.map((d, i) => {
                     const numDia = Number(d.fecha.slice(8, 10));
+                    // Cada xornada leva debaixo en que número vai ("3/8") e un
+                    // ✅ cando xa rematou, para saber de golpe por onde imos.
+                    const acabou = now > finDoDia(d);
+                    const enCurso = !acabou && now >= eventoDate(d, d.eventos[0].hora);
                     return (
                         <button
                             key={d.fecha}
@@ -98,11 +147,31 @@ export function Itinerario() {
                                 "shrink-0 snap-start flex flex-col items-center justify-center px-3 py-2 rounded-xl border min-w-[62px] transition-colors",
                                 i === activeIdx
                                     ? "bg-primary text-primary-foreground border-transparent"
-                                    : "bg-card text-muted-foreground border-slate-200 hover:border-slate-300"
+                                    : acabou
+                                        ? "bg-card text-muted-foreground/70 border-slate-200"
+                                        : "bg-card text-muted-foreground border-slate-200 hover:border-slate-300"
                             )}
                         >
                             <span className="text-[11px] font-semibold leading-none">{d.etiqueta}</span>
                             <span className="text-lg font-black leading-tight">{numDia}</span>
+                            <span
+                                className={cn(
+                                    "flex items-center gap-0.5 text-[9px] font-bold leading-none mt-0.5 tabular-nums",
+                                    i === activeIdx ? "opacity-80" : "opacity-70",
+                                )}
+                            >
+                                {i + 1}/{ITINERARIO.length}
+                                {acabou && <span aria-label="rematado">✅</span>}
+                                {enCurso && (
+                                    <span
+                                        aria-label="hoxe"
+                                        className={cn(
+                                            "w-1.5 h-1.5 rounded-full animate-pulse",
+                                            i === activeIdx ? "bg-primary-foreground" : "bg-primary",
+                                        )}
+                                    />
+                                )}
+                            </span>
                         </button>
                     );
                 })}
@@ -155,11 +224,7 @@ export function Itinerario() {
                                         {ev.grupo && (
                                             <p className="text-sm text-primary font-semibold mt-1 ml-8 leading-snug">{ev.grupo}</p>
                                         )}
-                                        {ev.lugar && (
-                                            <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground mt-1 ml-8">
-                                                <MapPin className="w-3 h-3 shrink-0" /> {ev.lugar}
-                                            </div>
-                                        )}
+                                        {ev.lugar && <Lugar texto={ev.lugar} lugares={lugares} />}
                                         {/* La letra pequeña del cartel: organiza,
                                             colabora, patrocina… */}
                                         {ev.nota && (

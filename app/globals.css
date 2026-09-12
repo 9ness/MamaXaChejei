@@ -137,6 +137,30 @@
   0% { transform: scale(1); opacity: 0.55; }
   100% { transform: scale(2.8); opacity: 0; }
 }
+/* Sitios do programa (lib/lugares.ts): emoji dentro dunha pastilla branca,
+   para que se lea enriba do mapa sen competir cos puntos da xente. */
+.mxc-lugar {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  font-size: 17px;
+  line-height: 1;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 2px solid hsl(var(--primary));
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+}
+/* Chincheta provisional mentres o admin coloca un sitio: a raias e latexando,
+   para que se vexa que aínda non está gardada. */
+.mxc-lugar.is-borrador {
+  border-style: dashed;
+  animation: mxc-latexo 1.2s ease-in-out infinite;
+}
+@keyframes mxc-latexo {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.18); }
+}
 /* Pin destacado del enlace compartido (?p=lat,lng) */
 .mxc-target {
   font-size: 34px;

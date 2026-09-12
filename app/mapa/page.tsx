@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { Header } from '@/components/Header';
 import { MapaClient } from '@/components/MapaClient';
+import { isAdmin } from '@/lib/admin-auth';
+import { getLugares } from '@/app/actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,7 +53,10 @@ export async function generateMetadata(
     };
 }
 
-export default function MapaPage() {
+export default async function MapaPage() {
+    // Un só HGETALL para as chinchetas dos sitios; e o admin é o único que as move.
+    const [admin, lugares] = await Promise.all([isAdmin(), getLugares()]);
+
     return (
         <main className="min-h-screen bg-gray-50/50 dark:bg-zinc-950">
             <div className="container mx-auto py-8 px-4 max-w-3xl">
@@ -66,7 +71,7 @@ export default function MapaPage() {
                     </p>
                 </div>
 
-                <MapaClient />
+                <MapaClient isAdmin={admin} lugaresIniciais={lugares} />
             </div>
         </main>
     );

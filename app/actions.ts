@@ -21,6 +21,7 @@ import {
     multiplicadorAposta,
 } from '@/lib/lupebet';
 import { fotoId } from '@/lib/fotos';
+import { basePorId, emojiValido, type LugarGardado, type LugaresGardados } from '@/lib/lugares';
 import { revalidatePath, unstable_noStore as noStore } from 'next/cache';
 import { z } from 'zod';
 
@@ -878,6 +879,78 @@ export async function getLocations(): Promise<MapPoint[]> {
         return points;
     } catch {
         return [];
+    }
+}
+
+// --- SITIOS DA FESTA (as chinchetas fixas do mapa) ---
+// Os NOMES son datos do cartel (lib/lugares.ts). O que se garda aquí é só
+// ONDE cae cada un e con que icona: colócao o admin tocando no mapa, porque
+// ningunha destas prazas ten unha coordenada que se poida mirar nun sitio.
+
+const LUGARES_KEY = `${NAMESPACE}:lugares`;   // HASH id -> {lat,lng,emoji}
+
+/** Un só comando (HGETALL) e cabe todo: son doce sitios como moito. */
+export async function getLugares(): Promise<LugaresGardados> {
+    try {
+        const raw = await redis.hgetall<Record<string, LugarGardado | string>>(LUGARES_KEY);
+        if (!raw) return {};
+        const out: LugaresGardados = {};
+        for (const [id, valor] of Object.entries(raw)) {
+            if (!basePorId(id)) continue;   // sitio que xa non está no cartel
+            try {
+                // @upstash/redis unhas veces devolve o JSON xa feito e outras o texto.
+                const l = (typeof valor === 'string' ? JSON.parse(valor) : valor) as LugarGardado;
+                if (l && typeof l.lat === 'number' && typeof l.lng === 'number') {
+                    out[id] = { lat: l.lat, lng: l.lng, emoji: String(l.emoji ?? '📍') };
+                }
+            } catch {
+                // un sitio corrupto non pode tirar o mapa enteiro
+            }
+        }
+        return out;
+    } catch {
+        return {};
+    }
+}
+
+export async function gardarLugar(id: string, lat: number, lng: number, emoji: string) {
+    if (!(await isAdminRequest())) return { success: false, error: 'Non autorizado' };
+
+    const base = basePorId(id);
+    if (!base) return { success: false, error: 'Ese sitio non está no programa' };
+    if (
+        typeof lat !== 'number' || typeof lng !== 'number' ||
+        !Number.isFinite(lat) || !Number.isFinite(lng) ||
+        lat < -90 || lat > 90 || lng < -180 || lng > 180
+    ) {
+        return { success: false, error: 'Coordenadas non válidas' };
+    }
+    // A icona ten que saír da paleta: acaba dentro do HTML da chincheta de
+    // Leaflet, así que texto libre aquí sería un buraco.
+    const icona = emojiValido(emoji) ? emoji : base.emoji;
+
+    try {
+        const valor: LugarGardado = { lat, lng, emoji: icona };
+        await redis.hset(LUGARES_KEY, { [id]: JSON.stringify(valor) });
+        revalidatePath('/');
+        revalidatePath('/mapa');
+        return { success: true };
+    } catch {
+        return { success: false, error: 'Non se puido gardar o sitio' };
+    }
+}
+
+export async function borrarLugar(id: string) {
+    if (!(await isAdminRequest())) return { success: false, error: 'Non autorizado' };
+    if (!basePorId(id)) return { success: false, error: 'Ese sitio non está no programa' };
+
+    try {
+        await redis.hdel(LUGARES_KEY, id);
+        revalidatePath('/');
+        revalidatePath('/mapa');
+        return { success: true };
+    } catch {
+        return { success: false, error: 'Non se puido quitar o sitio' };
     }
 }
 

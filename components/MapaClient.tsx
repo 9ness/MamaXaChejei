@@ -5,9 +5,18 @@ import 'leaflet/dist/leaflet.css';
 import type * as L from 'leaflet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { MapPin, Radio, Loader2, Users, Check, Share2, LocateFixed } from 'lucide-react';
+import { MapPin, Radio, Loader2, Users, Check, Share2, LocateFixed, Pencil, Trash2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { shareLocation, getLocations, removeLocation } from '@/app/actions';
+import { shareLocation, getLocations, removeLocation, gardarLugar, borrarLugar } from '@/app/actions';
+import {
+    EMOJIS_LUGAR,
+    LUGARES_BASE,
+    basePorId,
+    lugaresColocados,
+    mapsUrl,
+    type LugarBase,
+    type LugaresGardados,
+} from '@/lib/lugares';
 import { pedirRefresco, publicarAvisos, lerAvisos } from '@/lib/avisos';
 
 // 📍 Recinto da festa: Praza de Castelao (Rianxo). Centro del mapa.
@@ -125,12 +134,25 @@ function fmtRestante(ms: number): string {
     return `${m}:${String(ss).padStart(2, '0')}`;
 }
 
-export function MapaClient() {
+interface MapaClientProps {
+    /** Só o admin pode mover as chinchetas dos sitios do programa. */
+    isAdmin?: boolean;
+    /** Onde cae cada sitio, xa lido en servidor (app/mapa/page.tsx). */
+    lugaresIniciais?: LugaresGardados;
+}
+
+export function MapaClient({ isAdmin = false, lugaresIniciais = {} }: MapaClientProps) {
     const mapRef = useRef<HTMLDivElement>(null);
     const mapObj = useRef<L.Map | null>(null);
     const leafletRef = useRef<typeof L | null>(null);
     const layerRef = useRef<L.LayerGroup | null>(null);
     const targetRef = useRef<L.Marker | null>(null);
+    // Chinchetas dos sitios do programa: capa propia porque se redebuxan cada
+    // vez que o admin move unha, e o índice por id para poder abrir a de
+    // /mapa?lugar=…
+    const lugaresLayer = useRef<L.LayerGroup | null>(null);
+    const lugaresRef = useRef<Map<string, L.Marker>>(new Map());
+    const xaCentrado = useRef(false);   // /mapa?lugar=… céntrase unha soa vez
     const targetPos = useRef<{ lat: number; lng: number } | null>(null);
     const watchId = useRef<number | null>(null);
     const xaEnDirecto = useRef(false);
@@ -149,6 +171,15 @@ export function MapaClient() {
     // Compartido puntual: hasta cuándo dura (para cuenta atrás + botón de quitar)
     const [shareUntil, setShareUntil] = useState<number | null>(null);
     const [nowTick, setNowTick] = useState<number>(0);
+
+    // --- Sitios do programa (só os toca o admin) ---
+    const [lugares, setLugares] = useState<LugaresGardados>(lugaresIniciais);
+    const [editando, setEditando] = useState(false);
+    const [seleccion, setSeleccion] = useState<string | null>(null);
+    // Chincheta provisional: onde quedaría o sitio se gardases agora.
+    const [borrador, setBorrador] = useState<{ lat: number; lng: number } | null>(null);
+    const [emojiSel, setEmojiSel] = useState<string>('📍');
+    const [gardando, setGardando] = useState(false);
 
     // Preferencias del usuario
     const [nombre, setNombre] = useState('');
@@ -269,6 +300,10 @@ export function MapaClient() {
                     .addTo(map)
                     .bindPopup(`<b>${escapeHtml(poi.label)}</b>`);
             });
+
+            // Os sitios do programa van na súa propia capa: redebúxanse cada
+            // vez que o admin move unha chincheta (ver o efecto de máis abaixo).
+            lugaresLayer.current = Lm.layerGroup().addTo(map);
 
             layerRef.current = Lm.layerGroup().addTo(map);
             mapObj.current = map;
@@ -410,6 +445,147 @@ export function MapaClient() {
             : '📍 Alguén da peña compartiu a súa ubicación aquí.');
         refreshPoints(); // por si el punto real ya está: dedupe inmediato
     }, [mapReady, refreshPoints]);
+
+    /** Escoller un sitio para colocalo: se xa estaba posto, vaise a el. */
+    const escollerSitio = useCallback((id: string) => {
+        const base = basePorId(id);
+        const posto = lugares[id];
+        setSeleccion(id);
+        setBorrador(posto ? { lat: posto.lat, lng: posto.lng } : null);
+        setEmojiSel(posto?.emoji ?? base?.emoji ?? '📍');
+        if (posto) {
+            mapObj.current?.setView([posto.lat, posto.lng], 18);
+            setStatus(`✏️ ${base?.nome}: toca noutro punto ou arrastra a chincheta.`);
+        } else {
+            setStatus(`👆 Toca no mapa onde cae ${base?.nome}.`);
+        }
+    }, [lugares]);
+
+    // Debuxa as chinchetas dos sitios. Vai nun efecto propio (e non no arranque
+    // do mapa) porque o admin móveas en vivo: cada cambio redebuxa a capa.
+    useEffect(() => {
+        const Lm = leafletRef.current;
+        const capa = lugaresLayer.current;
+        if (!mapReady || !Lm || !capa) return;
+
+        capa.clearLayers();
+        lugaresRef.current.clear();
+
+        // O emoji vai dentro do HTML da chincheta: escápase igual que os nomes.
+        const chincheta = (emoji: string, extra = '') => Lm.divIcon({
+            html: `<div class="mxc-lugar ${extra}">${escapeHtml(emoji)}</div>`,
+            className: '',
+            iconSize: [32, 32],
+            iconAnchor: [16, 30],
+        });
+
+        lugaresColocados(lugares).forEach(lugar => {
+            // O que se está a mover agora sae como borrador, non como fixo.
+            if (editando && seleccion === lugar.id && borrador) return;
+            const marker = Lm.marker([lugar.lat, lugar.lng], { icon: chincheta(lugar.emoji) }).addTo(capa);
+            if (editando) {
+                // En modo edición a chincheta non abre ficha: escóllese para movela.
+                // Hai que cortar o evento: en Leaflet o clic nun marcador tamén
+                // chega ao mapa, e o mapa colocaría aí o sitio que estaba escollido.
+                marker.on('click', (e) => {
+                    Lm.DomEvent.stopPropagation(e);
+                    escollerSitio(lugar.id);
+                });
+            } else {
+                marker.bindPopup(
+                    `<b>${escapeHtml(lugar.nome)}</b><br/>` +
+                    `<a href="${mapsUrl(lugar)}" target="_blank" rel="noopener noreferrer">Ir con Google Maps ↗</a>`,
+                );
+            }
+            lugaresRef.current.set(lugar.id, marker);
+        });
+
+        if (editando && seleccion && borrador) {
+            const m = Lm.marker([borrador.lat, borrador.lng], {
+                icon: chincheta(emojiSel, 'is-borrador'),
+                draggable: true,
+                zIndexOffset: 900,
+            }).addTo(capa);
+            m.on('click', (e) => Lm.DomEvent.stopPropagation(e));
+            m.on('dragend', () => {
+                const { lat, lng } = m.getLatLng();
+                setBorrador(b => (b ? { ...b, lat, lng } : b));
+            });
+            m.bindTooltip(escapeHtml(basePorId(seleccion)?.nome ?? ''), {
+                permanent: true,
+                direction: 'top',
+                offset: [0, -30],
+                className: 'mxc-tooltip',
+            });
+        }
+    }, [mapReady, lugares, editando, seleccion, borrador, emojiSel, escollerSitio]);
+
+    // Modo colocar: tocar no mapa pon (ou move) a chincheta do sitio escollido.
+    useEffect(() => {
+        const map = mapObj.current;
+        if (!mapReady || !map || !editando) return;
+        const onClick = (e: L.LeafletMouseEvent) => {
+            if (!seleccion) {
+                setStatus('Escolle primeiro un sitio da lista de abaixo.');
+                return;
+            }
+            setBorrador({ lat: e.latlng.lat, lng: e.latlng.lng });
+        };
+        map.on('click', onClick);
+        return () => { map.off('click', onClick); };
+    }, [mapReady, editando, seleccion]);
+
+    // Desde o programa: /mapa?lugar=<id> → centra nese sitio e abre a súa ficha.
+    // Espera a ter as chinchetas debuxadas (por iso depende de `lugares`).
+    useEffect(() => {
+        if (!mapReady || xaCentrado.current) return;
+        const map = mapObj.current;
+        if (!map) return;
+        const id = new URLSearchParams(window.location.search).get('lugar');
+        const base = basePorId(id);
+        const posto = id ? lugares[id] : undefined;
+        if (!base || !posto) return;
+        xaCentrado.current = true;
+        map.setView([posto.lat, posto.lng], 18);
+        lugaresRef.current.get(base.id)?.openPopup();
+        setStatus(`${posto.emoji} ${base.nome} · aquí é onde toca.`);
+    }, [mapReady, lugares]);
+
+    const gardarSitio = async () => {
+        if (!seleccion || !borrador) return;
+        setGardando(true);
+        const r = await gardarLugar(seleccion, borrador.lat, borrador.lng, emojiSel);
+        setGardando(false);
+        if (!r.success) {
+            setStatus(`❌ ${r.error ?? 'Non se puido gardar o sitio.'}`);
+            return;
+        }
+        const nome = basePorId(seleccion)?.nome ?? 'O sitio';
+        setLugares(prev => ({ ...prev, [seleccion]: { ...borrador, emoji: emojiSel } }));
+        setSeleccion(null);
+        setBorrador(null);
+        setStatus(`✅ ${nome} xa está no mapa.`);
+    };
+
+    const quitarSitio = async () => {
+        if (!seleccion) return;
+        setGardando(true);
+        const r = await borrarLugar(seleccion);
+        setGardando(false);
+        if (!r.success) {
+            setStatus(`❌ ${r.error ?? 'Non se puido quitar o sitio.'}`);
+            return;
+        }
+        const nome = basePorId(seleccion)?.nome ?? 'O sitio';
+        setLugares(prev => {
+            const copia = { ...prev };
+            delete copia[seleccion];
+            return copia;
+        });
+        setSeleccion(null);
+        setBorrador(null);
+        setStatus(`🗑️ ${nome} xa non sae no mapa.`);
+    };
 
     // Obtiene la posición actual (para compartir tras recargar, sin punto en memoria).
     const getPos = () => new Promise<{ lat: number; lng: number }>((resolve, reject) => {
@@ -642,10 +818,137 @@ export function MapaClient() {
                 <p className="text-xs text-center bg-muted/60 rounded-lg px-3 py-2">{status}</p>
             )}
 
+            {/* Colocar os sitios do programa: só admin. Os nomes veñen do cartel
+                (lib/lugares.ts); o que se garda aquí é onde cae cada un. */}
+            {isAdmin && (
+                <div className="border rounded-xl bg-card shadow-sm overflow-hidden">
+                    <button
+                        onClick={() => {
+                            const novo = !editando;
+                            setEditando(novo);
+                            setSeleccion(null);
+                            setBorrador(null);
+                            setStatus(novo ? 'Escolle un sitio e toca no mapa onde cae.' : '');
+                        }}
+                        className="w-full flex items-center justify-between gap-2 px-3 py-2.5 text-sm font-semibold"
+                    >
+                        <span className="flex items-center gap-2">
+                            <Pencil className="w-4 h-4 text-primary shrink-0" />
+                            Colocar os sitios do programa
+                        </span>
+                        <span className="text-xs font-normal text-muted-foreground tabular-nums shrink-0">
+                            {Object.keys(lugares).length}/{LUGARES_BASE.length}
+                            {editando ? ' · pechar' : ''}
+                        </span>
+                    </button>
+
+                    {editando && (
+                        <div className="border-t p-3 space-y-3">
+                            <p className="text-[11px] text-muted-foreground leading-relaxed">
+                                1️⃣ escolle o sitio · 2️⃣ toca no mapa (ou arrastra a chincheta) · 3️⃣ elixe icona e garda.
+                            </p>
+
+                            <div className="flex flex-wrap gap-1.5">
+                                {LUGARES_BASE.map((l: LugarBase) => {
+                                    const posto = Boolean(lugares[l.id]);
+                                    const activo = seleccion === l.id;
+                                    return (
+                                        <button
+                                            key={l.id}
+                                            onClick={() => escollerSitio(l.id)}
+                                            className={cn(
+                                                "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold transition-colors",
+                                                activo
+                                                    ? "bg-primary text-primary-foreground border-transparent"
+                                                    : posto
+                                                        ? "bg-primary/5 text-primary border-primary/30"
+                                                        : "bg-background text-muted-foreground border-dashed border-slate-300",
+                                            )}
+                                        >
+                                            <span>{lugares[l.id]?.emoji ?? l.emoji}</span>
+                                            {l.nome}
+                                            {posto && !activo && <Check className="w-3 h-3 shrink-0" />}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            {seleccion && (
+                                <div className="border-t pt-3 space-y-2.5">
+                                    <p className="text-xs font-semibold">
+                                        {basePorId(seleccion)?.nome}
+                                        <span className="font-normal text-muted-foreground">
+                                            {borrador
+                                                ? ` · ${borrador.lat.toFixed(5)}, ${borrador.lng.toFixed(5)}`
+                                                : ' · toca no mapa'}
+                                        </span>
+                                    </p>
+
+                                    <div className="flex flex-wrap gap-1">
+                                        {EMOJIS_LUGAR.map(e => (
+                                            <button
+                                                key={e}
+                                                onClick={() => setEmojiSel(e)}
+                                                aria-label={`Icona ${e}`}
+                                                className={cn(
+                                                    "w-8 h-8 rounded-lg border text-base leading-none grid place-items-center transition-transform active:scale-95",
+                                                    emojiSel === e
+                                                        ? "border-primary bg-primary/10 scale-110"
+                                                        : "border-slate-200 bg-background",
+                                                )}
+                                            >
+                                                {e}
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    <div className="flex gap-2">
+                                        <Button
+                                            size="sm"
+                                            onClick={gardarSitio}
+                                            disabled={!borrador || gardando}
+                                            className="flex-1"
+                                        >
+                                            {gardando
+                                                ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                                                : <Check className="w-4 h-4 mr-1.5" />}
+                                            Gardar aquí
+                                        </Button>
+                                        {lugares[seleccion] && (
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={quitarSitio}
+                                                disabled={gardando}
+                                                aria-label="Quitar do mapa"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </Button>
+                                        )}
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() => { setSeleccion(null); setBorrador(null); }}
+                                            aria-label="Cancelar"
+                                        >
+                                            <X className="w-4 h-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+
             <div className="relative">
                 <div
                     ref={mapRef}
-                    className="w-full h-[55vh] min-h-[340px] rounded-xl border shadow-sm overflow-hidden z-0"
+                    className={cn(
+                        "w-full h-[55vh] min-h-[340px] rounded-xl border shadow-sm overflow-hidden z-0",
+                        // Colocando sitios: a cruz avisa de que tocar pon chincheta.
+                        editando && "[&_.leaflet-container]:cursor-crosshair ring-2 ring-primary/40",
+                    )}
                 />
                 <button
                     onClick={handleLocateMe}

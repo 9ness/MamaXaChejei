@@ -166,6 +166,7 @@ public/               # sprites del juego (man*.png, ~2 MB cada uno)
 | `fiesta:fotos_like_de:<anonId>` | SET | fotos que marcó ese móvil |
 | `fiesta:loc:<anonId>` | STRING + TTL | punto del mapa (15/30/60 min o directo) |
 | `fiesta:loc_ids` | SET | índice de puntos (se auto-limpia al leer caducados) |
+| `fiesta:lugares` | HASH | id do sitio → `{lat,lng,emoji}` (colócaos o admin no mapa) |
 | `fiesta:boletos` | LIST | boletos de broma de la peña (JSON, LTRIM 0 199) |
 | `fiesta:boletos_estado` | HASH | boletoId → `ganado`/`perdido` (aparte, para no reescribir la lista) |
 | `fiesta:boletos_destacados` | SET | boletoIds que el admin sube a "Os pronósticos da peña" |
@@ -314,7 +315,12 @@ store Blob). PENDIENTE: confirmar si conviene crear un `.env.example`.
     cada ~4 s con TTL de 60 s y la sesión se persiste en `localStorage`
     (`mapa_share`); el TTL de Redis es solo red de seguridad, la duración real
     la controla el cliente. Leaflet se importa dinámicamente en cliente — no lo
-    metas en un RSC.
+    metas en un RSC. **Los sitios del programa** (`lib/lugares.ts`) son otra
+    cosa: el fichero solo tiene los NOMBRES del cartel; dónde cae cada uno y con
+    qué icono lo coloca el admin tocando el mapa y vive en `fiesta:lugares`. El
+    emoji acaba dentro del HTML de un `divIcon`, así que solo puede salir de la
+    paleta cerrada `EMOJIS_LUGAR` (lo valida `gardarLugar` en servidor). Mientras
+    un sitio no esté colocado, el itinerario enseña su nombre en texto y ya.
 11. **Fotos:** subida directa cliente → Vercel Blob (store `mamaxachejei-fotos`,
     CDG1, público). En local NO llega el webhook `onUploadCompleted`, por eso el
     cliente llama además a `addFoto()` con la URL final. Límite 4 MB y solo
