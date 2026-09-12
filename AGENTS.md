@@ -166,6 +166,8 @@ public/               # sprites del juego (man*.png, ~2 MB cada uno)
 | `fiesta:fotos_like_de:<anonId>` | SET | fotos que marcó ese móvil |
 | `fiesta:audios` | LIST | cancións da peña (JSON `{url, ts, titulo, descarga?}`, LTRIM 0 99) |
 | `fiesta:audios_autor` | HASH | audioId → anonId (solo servidor, para poder borrarlo) |
+| `fiesta:audios_likes` | HASH | audioId → nº de 🔥 |
+| `fiesta:audios_like_de:<anonId>` | SET | canciones que marcó ese móvil |
 | `fiesta:loc:<anonId>` | STRING + TTL | punto del mapa (15/30/60 min o directo) |
 | `fiesta:loc_ids` | SET | índice de puntos (se auto-limpia al leer caducados) |
 | `fiesta:lugares` | HASH | id do sitio → `{lat,lng,emoji}` (colócaos o admin no mapa) |
@@ -344,6 +346,11 @@ store Blob). PENDIENTE: confirmar si conviene crear un `.env.example`.
     bajaría todas las canciones enteras. El botón de descarga usa el
     `downloadUrl` que devuelve Blob al subir (fuerza guardar en vez de
     reproducir); se guarda en `descarga` porque no se puede reconstruir sin él.
+    Los 🔥 de los audios van en SUS propias keys (`fiesta:audios_likes`), no en
+    las de fotos: las dos cosas se identifican por el nombre del fichero en Blob
+    y compartir contador sería cuestión de tiempo. El botón
+    (`components/BotonLume.tsx`) y el "fai 2 horas" (`components/Cando.tsx`) los
+    usan las dos secciones.
 12. **`components.json` declara `tailwind.config: ""`** aunque existe
     `tailwind.config.js` (Tailwind **3.4**, no 4). Si añades componentes shadcn
     con la CLI, revisa que no te reescriba la config ni el `globals.css`.
