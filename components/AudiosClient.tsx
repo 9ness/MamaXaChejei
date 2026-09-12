@@ -6,6 +6,7 @@ import { addAudio, deleteAudio, getAudios, getMeusAudios, type AudioPena } from 
 import { getAnonId } from '@/lib/anon-id';
 import { fotoId } from '@/lib/fotos';
 import { Cando } from '@/components/Cando';
+import { DIAS_FESTA, diaDaFoto } from '@/lib/festas';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Download, Loader2, Music, Trash2, Upload, X } from 'lucide-react';
@@ -41,6 +42,11 @@ export function AudiosClient({
 }) {
     const [audios, setAudios] = useState<AudioPena[]>(initialAudios);
     const [meus, setMeus] = useState<string[]>([]);
+    // O mesmo xogo de filtros que o mural, pero co seu propio estado: cambiar
+    // de pestana non ten por que revolver o que estabas mirando na outra.
+    // Aquí non hai 🔥, así que ese oco válo o abecedario.
+    const [orde, setOrde] = useState<'data' | 'nome' | 'dias'>('data');
+    const [dia, setDia] = useState<string | null>(null);
     const [pendente, setPendente] = useState<File | null>(null);
     const [titulo, setTitulo] = useState('');
     const [busy, setBusy] = useState(false);
@@ -118,6 +124,24 @@ export function AudiosClient({
         setAudios(prev => prev.filter(x => x.url !== a.url));
     };
 
+    // Cantas cancións hai de cada xornada: serve para o selector e para saber
+    // por onde abrilo.
+    const porDia = audios.reduce<Record<string, number>>((acc, a) => {
+        const d = diaDaFoto(a.ts);
+        acc[d] = (acc[d] ?? 0) + 1;
+        return acc;
+    }, {});
+
+    // Sen escoller nada, ábrese pola xornada da máis nova (a primeira da lista).
+    // Nada de Date.now() aquí: o render ten que dar sempre o mesmo.
+    const diaActivo = dia ?? (audios.length > 0 ? diaDaFoto(audios[0].ts) : DIAS_FESTA[0].id);
+
+    const listados = orde === 'nome'
+        ? [...audios].sort((a, b) => a.titulo.localeCompare(b.titulo, 'gl') || b.ts - a.ts)
+        : orde === 'dias'
+            ? audios.filter((a) => diaDaFoto(a.ts) === diaActivo)
+            : audios;
+
     return (
         <div className="space-y-6">
             {/* Subir */}
@@ -174,55 +198,125 @@ export function AudiosClient({
                     🎵 Aínda non hai nada. Sube a primeira canción da peña.
                 </p>
             ) : (
-                <ul className="space-y-3">
-                    {audios.map(a => {
-                        const podeBorrar = isAdmin || meus.includes(fotoId(a.url));
-                        return (
-                            <li key={a.url} className="bg-card border rounded-xl p-3 shadow-sm">
-                                <div className="flex items-start justify-between gap-2">
-                                    <div className="min-w-0">
-                                        <p className="font-bold text-sm leading-snug flex items-center gap-1.5">
-                                            <span className="shrink-0">🎵</span>
-                                            <span className="truncate">{a.titulo}</span>
-                                        </p>
-                                        <p className="text-[11px] text-muted-foreground mt-0.5">
-                                            <Cando ts={a.ts} />
-                                        </p>
-                                    </div>
-                                    <div className="flex items-center gap-1 shrink-0">
-                                        <a
-                                            href={urlDescarga(a)}
-                                            download
-                                            aria-label={`Descargar ${a.titulo}`}
-                                            className="h-8 w-8 grid place-items-center rounded-full text-muted-foreground hover:bg-muted transition-colors"
-                                        >
-                                            <Download className="w-4 h-4" />
-                                        </a>
-                                        {podeBorrar && (
-                                            <button
-                                                onClick={() => borrar(a)}
-                                                aria-label={`Borrar ${a.titulo}`}
-                                                className="h-8 w-8 grid place-items-center rounded-full text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors"
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
+                <>
+                    {/* Mesmos filtros ca o mural. Cun só audio non se ensinan:
+                        non hai nada que ordenar. */}
+                    {audios.length > 1 && (
+                        <div className="flex justify-center gap-1.5 flex-wrap">
+                            {([
+                                { v: 'data' as const, label: '🕒 Recentes' },
+                                { v: 'nome' as const, label: '🔤 Nome' },
+                                { v: 'dias' as const, label: '📅 Por días' },
+                            ]).map((op) => (
+                                <button
+                                    key={op.v}
+                                    type="button"
+                                    onClick={() => setOrde(op.v)}
+                                    className={`rounded-full px-3.5 py-1.5 text-xs font-bold border transition-colors ${
+                                        orde === op.v
+                                            ? 'bg-primary text-primary-foreground border-primary'
+                                            : 'bg-card text-muted-foreground hover:bg-muted'
+                                    }`}
+                                >
+                                    {op.label}
+                                </button>
+                            ))}
+                        </div>
+                    )}
 
-                                {/* preload="none": non se baixa NADA ata que alguén
-                                    lle dá ao play. É o que evita que abrir a páxina
-                                    se coma os datos de todos coas cancións enteiras. */}
-                                <audio
-                                    controls
-                                    preload="none"
-                                    src={a.url}
-                                    className="w-full mt-2 h-9"
-                                />
-                            </li>
-                        );
-                    })}
-                </ul>
+                    {/* As xornadas non caben todas: arrástrase de lado. Cada unha
+                        ancórase ao bordo para que non queden a medias. */}
+                    {orde === 'dias' && (
+                        <div className="-mx-4 px-4 flex gap-1.5 overflow-x-auto no-scrollbar snap-x snap-mandatory">
+                            {DIAS_FESTA.map((d) => {
+                                const n = porDia[d.id] ?? 0;
+                                const activo = d.id === diaActivo;
+                                return (
+                                    <button
+                                        key={d.id}
+                                        type="button"
+                                        onClick={() => setDia(d.id)}
+                                        className={`snap-start shrink-0 rounded-lg px-3 py-1.5 text-left border transition-colors ${
+                                            activo
+                                                ? 'bg-primary text-primary-foreground border-primary'
+                                                : n > 0
+                                                    ? 'bg-card hover:bg-muted'
+                                                    : 'bg-card text-muted-foreground/50'
+                                        }`}
+                                    >
+                                        <span className="block text-xs font-bold leading-tight whitespace-nowrap">
+                                            {d.alcume ?? d.etiqueta}
+                                        </span>
+                                        <span className={`block text-[10px] leading-tight whitespace-nowrap ${activo ? 'opacity-80' : 'text-muted-foreground'}`}>
+                                            {d.alcume ? d.etiqueta : `${n} audio${n === 1 ? '' : 's'}`}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    <p className="text-center text-[11px] text-muted-foreground">
+                        Cancións totais: <span className="font-bold text-foreground">{audios.length}</span>
+                        {orde === 'dias' && ` · ${listados.length} nesta xornada`}
+                    </p>
+
+                    {listados.length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-8">
+                            Nesta xornada non hai ningunha.
+                        </p>
+                    ) : (
+                        <ul className="space-y-3">
+                            {listados.map(a => {
+                                const podeBorrar = isAdmin || meus.includes(fotoId(a.url));
+                                return (
+                                <li key={a.url} className="bg-card border rounded-xl p-3 shadow-sm">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div className="min-w-0">
+                                            <p className="font-bold text-sm leading-snug flex items-center gap-1.5">
+                                                <span className="shrink-0">🎵</span>
+                                                <span className="truncate">{a.titulo}</span>
+                                            </p>
+                                            <p className="text-[11px] text-muted-foreground mt-0.5">
+                                                <Cando ts={a.ts} />
+                                            </p>
+                                        </div>
+                                        <div className="flex items-center gap-1 shrink-0">
+                                            <a
+                                                href={urlDescarga(a)}
+                                                download
+                                                aria-label={`Descargar ${a.titulo}`}
+                                                className="h-8 w-8 grid place-items-center rounded-full text-muted-foreground hover:bg-muted transition-colors"
+                                            >
+                                                <Download className="w-4 h-4" />
+                                            </a>
+                                            {podeBorrar && (
+                                                <button
+                                                    onClick={() => borrar(a)}
+                                                    aria-label={`Borrar ${a.titulo}`}
+                                                    className="h-8 w-8 grid place-items-center rounded-full text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* preload="none": non se baixa NADA ata que alguén
+                                        lle dá ao play. É o que evita que abrir a páxina
+                                        se coma os datos de todos coas cancións enteiras. */}
+                                    <audio
+                                        controls
+                                        preload="none"
+                                        src={a.url}
+                                        className="w-full mt-2 h-9"
+                                    />
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    )}
+                </>
             )}
 
             <p className="text-[11px] text-muted-foreground text-center leading-relaxed">
