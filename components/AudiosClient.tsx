@@ -285,10 +285,10 @@ export function AudiosClient({
                                             <a
                                                 href={urlDescarga(a)}
                                                 download
-                                                aria-label={`Descargar ${a.titulo}`}
-                                                className="h-8 w-8 grid place-items-center rounded-full text-muted-foreground hover:bg-muted transition-colors"
+                                                aria-label={`Gardar ${a.titulo} no móbil`}
+                                                className="h-8 inline-flex items-center gap-1 px-2.5 rounded-full border border-primary/30 bg-primary/5 text-primary text-[11px] font-semibold hover:bg-primary/10 transition-colors"
                                             >
-                                                <Download className="w-4 h-4" />
+                                                <Download className="w-3.5 h-3.5 shrink-0" /> Gardar
                                             </a>
                                             {podeBorrar && (
                                                 <button
@@ -319,9 +319,17 @@ export function AudiosClient({
                 </>
             )}
 
-            <p className="text-[11px] text-muted-foreground text-center leading-relaxed">
-                🎧 As cancións só se descargan cando lle dás ao play, e despois quedan
-                gardadas no teu móbil: escoitalas outra vez xa non gasta datos.
+            {/* Sen prometer de máis: a caché do navegador dura o que o navegador
+                queira (Blob pide un mes, pero iso é "best effort" e Safari bórrao
+                en canto lle fai falta sitio). Quedar coa canción de verdade é
+                darlle a Gardar. */}
+            <p className="text-[11px] text-muted-foreground text-center leading-relaxed max-w-md mx-auto">
+                🎧 Non se baixa nada ata que lle dás ao play. Despois o móbil adoita
+                gardala un tempo e volver a escoitala non gasta datos, pero o
+                navegador bórraa cando precisa sitio.
+                <br />
+                ⬇️ Para quedar con ela de verdade —sen cobertura, ou para mandala
+                por WhatsApp— dálle a <span className="font-semibold">Gardar</span>.
             </p>
         </div>
     );
