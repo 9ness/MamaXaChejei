@@ -16,7 +16,6 @@ interface NavItem {
 
 const BASE_ITEMS: NavItem[] = [
     { href: '/', label: 'Inicio', icon: Home },
-    { href: '/lista', label: 'Lista', icon: List },
     { href: '/mapa', label: 'Mapa', icon: MapPin },
     // "Fotos" y no "Recordos": con 6 pestañas la palabra larga se comía su hueco
     // y dejaba sin aire a la de al lado. La sección se sigue llamando Recordos.
@@ -24,7 +23,12 @@ const BASE_ITEMS: NavItem[] = [
     { href: '/lupebet', label: 'LupeBet', icon: Ticket },
 ];
 
-const ADMIN_ITEM: NavItem = { href: '/gestion', label: 'Gestión', icon: ShieldCheck };
+// La lista de tallas es cosa de gestión: solo sale en modo admin. La página
+// /lista sigue existiendo y es pública si alguien tiene el enlace.
+const ADMIN_ITEMS: NavItem[] = [
+    { href: '/lista', label: 'Lista', icon: List },
+    { href: '/gestion', label: 'Gestión', icon: ShieldCheck },
+];
 
 /**
  * Cada cuánto se pregunta cuando NO estás en el mapa. Dos minutos: son dos
@@ -47,7 +51,7 @@ function Insignia({ n }: { n: number }) {
 
 export function BottomNav({ isAdmin = false }: { isAdmin?: boolean }) {
     const pathname = usePathname();
-    const items = isAdmin ? [...BASE_ITEMS, ADMIN_ITEM] : BASE_ITEMS;
+    const items = isAdmin ? [...BASE_ITEMS, ...ADMIN_ITEMS] : BASE_ITEMS;
 
     const [avisos, setAvisos] = useState<Avisos>(AVISOS_VACIOS);
 
