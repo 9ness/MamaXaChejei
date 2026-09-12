@@ -9,7 +9,10 @@ import { Cando } from '@/components/Cando';
 import { DIAS_FESTA, diaDaFoto } from '@/lib/festas';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Download, Loader2, Music, Trash2, Upload, X } from 'lucide-react';
+import {
+    ArrowDownAZ, CalendarDays, Clock, Download, Headphones, Loader2,
+    Music, Share2, Trash2, Upload, X,
+} from 'lucide-react';
 
 // 12 MB: o mesmo tope que deixa pasar a ruta de subida. Dá para uns 12 min a
 // 128 kbps, moito máis do que dura unha canción da peña.
@@ -114,6 +117,27 @@ export function AudiosClient({
         }
     };
 
+    /**
+     * Comparte a canción. Vai a URL directa do MP3 e non a da páxina: quen a
+     * reciba ábrea e xa soa (ou gárdaa), sen ter que buscala na app.
+     * Mesmo camiño que o resto da app: folla nativa e, se non a hai, WhatsApp.
+     */
+    const compartir = async (a: AudioPena) => {
+        const texto = `${a.titulo} 🎵 Juadalupe'26`;
+        try {
+            if (typeof navigator.share === 'function') {
+                await navigator.share({ title: a.titulo, text: texto, url: a.url });
+                return;
+            }
+            window.open(
+                `https://wa.me/?text=${encodeURIComponent(`${texto}\n${a.url}`)}`,
+                '_blank',
+            );
+        } catch {
+            /* cancelado polo usuario */
+        }
+    };
+
     const borrar = async (a: AudioPena) => {
         if (!confirm(`Borrar «${a.titulo}»?`)) return;
         const r = await deleteAudio(a.url, getAnonId());
@@ -194,9 +218,10 @@ export function AudiosClient({
 
             {/* Lista */}
             {audios.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-10">
-                    🎵 Aínda non hai nada. Sube a primeira canción da peña.
-                </p>
+                <div className="text-center text-muted-foreground py-16">
+                    <Music className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                    <p className="text-sm">Aínda non hai nada. Sube a primeira canción da peña.</p>
+                </div>
             ) : (
                 <>
                     {/* Mesmos filtros ca o mural. Cun só audio non se ensinan:
@@ -204,21 +229,21 @@ export function AudiosClient({
                     {audios.length > 1 && (
                         <div className="flex justify-center gap-1.5 flex-wrap">
                             {([
-                                { v: 'data' as const, label: '🕒 Recentes' },
-                                { v: 'nome' as const, label: '🔤 Nome' },
-                                { v: 'dias' as const, label: '📅 Por días' },
-                            ]).map((op) => (
+                                { v: 'data' as const, label: 'Recentes', Icon: Clock },
+                                { v: 'nome' as const, label: 'Nome', Icon: ArrowDownAZ },
+                                { v: 'dias' as const, label: 'Por días', Icon: CalendarDays },
+                            ]).map(({ v, label, Icon }) => (
                                 <button
-                                    key={op.v}
+                                    key={v}
                                     type="button"
-                                    onClick={() => setOrde(op.v)}
-                                    className={`rounded-full px-3.5 py-1.5 text-xs font-bold border transition-colors ${
-                                        orde === op.v
+                                    onClick={() => setOrde(v)}
+                                    className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold border transition-colors ${
+                                        orde === v
                                             ? 'bg-primary text-primary-foreground border-primary'
                                             : 'bg-card text-muted-foreground hover:bg-muted'
                                     }`}
                                 >
-                                    {op.label}
+                                    <Icon className="w-3.5 h-3.5 shrink-0" /> {label}
                                 </button>
                             ))}
                         </div>
@@ -272,46 +297,56 @@ export function AudiosClient({
                                 return (
                                 <li key={a.url} className="bg-card border rounded-xl p-3 shadow-sm">
                                     <div className="flex items-start justify-between gap-2">
-                                        <div className="min-w-0">
-                                            <p className="font-bold text-sm leading-snug flex items-center gap-1.5">
-                                                <span className="shrink-0">🎵</span>
-                                                <span className="truncate">{a.titulo}</span>
-                                            </p>
-                                            <p className="text-[11px] text-muted-foreground mt-0.5">
-                                                <Cando ts={a.ts} />
-                                            </p>
+                                        <div className="min-w-0 flex items-start gap-2">
+                                            <Music className="w-4 h-4 mt-0.5 shrink-0 text-primary" />
+                                            <div className="min-w-0">
+                                                <p className="font-bold text-sm leading-snug truncate">{a.titulo}</p>
+                                                <p className="text-[11px] text-muted-foreground mt-0.5">
+                                                    <Cando ts={a.ts} />
+                                                </p>
+                                            </div>
                                         </div>
-                                        <div className="flex items-center gap-1 shrink-0">
-                                            <a
-                                                href={urlDescarga(a)}
-                                                download
-                                                aria-label={`Gardar ${a.titulo} no móbil`}
-                                                className="h-8 inline-flex items-center gap-1 px-2.5 rounded-full border border-primary/30 bg-primary/5 text-primary text-[11px] font-semibold hover:bg-primary/10 transition-colors"
+                                        {/* Borrar vai só e arriba: separado dos outros dous para
+                                            non darlle sen querer ao lado de Gardar. */}
+                                        {podeBorrar && (
+                                            <button
+                                                onClick={() => borrar(a)}
+                                                aria-label={`Borrar ${a.titulo}`}
+                                                className="h-8 w-8 shrink-0 grid place-items-center rounded-full text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors"
                                             >
-                                                <Download className="w-3.5 h-3.5 shrink-0" /> Gardar
-                                            </a>
-                                            {podeBorrar && (
-                                                <button
-                                                    onClick={() => borrar(a)}
-                                                    aria-label={`Borrar ${a.titulo}`}
-                                                    className="h-8 w-8 grid place-items-center rounded-full text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
-                                            )}
-                                        </div>
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        )}
                                     </div>
 
-                                    {/* preload="none": non se baixa NADA ata que alguén
-                                        lle dá ao play. É o que evita que abrir a páxina
-                                        se coma os datos de todos coas cancións enteiras. */}
+                                    {/* preload="none": non se baixa NADA ata que alguén lle dá ao
+                                        play. É o que evita que abrir a páxina se coma os datos de
+                                        todos coas cancións enteiras. */}
                                     <audio
                                         controls
                                         preload="none"
                                         src={a.url}
                                         className="w-full mt-2 h-9"
                                     />
-                                    </li>
+
+                                    <div className="flex gap-2 mt-2">
+                                        <a
+                                            href={urlDescarga(a)}
+                                            download
+                                            aria-label={`Gardar ${a.titulo} no móbil`}
+                                            className="flex-1 h-9 inline-flex items-center justify-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 text-primary text-xs font-semibold hover:bg-primary/10 active:scale-95 transition-all"
+                                        >
+                                            <Download className="w-4 h-4 shrink-0" /> Gardar
+                                        </a>
+                                        <button
+                                            onClick={() => compartir(a)}
+                                            aria-label={`Compartir ${a.titulo}`}
+                                            className="flex-1 h-9 inline-flex items-center justify-center gap-1.5 rounded-lg border bg-card text-muted-foreground text-xs font-semibold hover:bg-muted active:scale-95 transition-all"
+                                        >
+                                            <Share2 className="w-4 h-4 shrink-0" /> Compartir
+                                        </button>
+                                    </div>
+                                </li>
                                 );
                             })}
                         </ul>
@@ -323,14 +358,23 @@ export function AudiosClient({
                 queira (Blob pide un mes, pero iso é "best effort" e Safari bórrao
                 en canto lle fai falta sitio). Quedar coa canción de verdade é
                 darlle a Gardar. */}
-            <p className="text-[11px] text-muted-foreground text-center leading-relaxed max-w-md mx-auto">
-                🎧 Non se baixa nada ata que lle dás ao play. Despois o móbil adoita
-                gardala un tempo e volver a escoitala non gasta datos, pero o
-                navegador bórraa cando precisa sitio.
-                <br />
-                ⬇️ Para quedar con ela de verdade —sen cobertura, ou para mandala
-                por WhatsApp— dálle a <span className="font-semibold">Gardar</span>.
-            </p>
+            <div className="text-[11px] text-muted-foreground leading-relaxed max-w-md mx-auto space-y-1.5">
+                <p className="flex gap-1.5">
+                    <Headphones className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    <span>
+                        Non se baixa nada ata que lle dás ao play. Despois o móbil adoita
+                        gardala un tempo e volver a escoitala non gasta datos, pero o
+                        navegador bórraa cando precisa sitio.
+                    </span>
+                </p>
+                <p className="flex gap-1.5">
+                    <Download className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    <span>
+                        Para quedar con ela de verdade —sen cobertura, ou para mandala
+                        por WhatsApp— dálle a <span className="font-semibold">Gardar</span>.
+                    </span>
+                </p>
+            </div>
         </div>
     );
 }

@@ -8,7 +8,7 @@ import { fotoId } from '@/lib/fotos';
 import { DIAS_FESTA, diaDaFoto } from '@/lib/festas';
 import { Cando } from '@/components/Cando';
 import { Button } from '@/components/ui/button';
-import { Camera, Flame, ImagePlus, Loader2, Trash2, X } from 'lucide-react';
+import { CalendarDays, Camera, Clock, Flame, ImagePlus, Loader2, Trash2, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
 // --- COMPRESIÓN EN EL MÓVIL ---
@@ -472,21 +472,21 @@ export function FotosClient({
                     {fotos.length > 1 && (
                         <div className="flex justify-center gap-1.5 flex-wrap">
                             {([
-                                { v: 'data' as const, label: '🕒 Recentes' },
-                                { v: 'likes' as const, label: '🔥 Gustadas' },
-                                { v: 'dias' as const, label: '📅 Por días' },
-                            ]).map((op) => (
+                                { v: 'data' as const, label: 'Recentes', Icon: Clock },
+                                { v: 'likes' as const, label: 'Gustadas', Icon: Flame },
+                                { v: 'dias' as const, label: 'Por días', Icon: CalendarDays },
+                            ]).map(({ v, label, Icon }) => (
                                 <button
-                                    key={op.v}
+                                    key={v}
                                     type="button"
-                                    onClick={() => setOrde(op.v)}
-                                    className={`rounded-full px-3.5 py-1.5 text-xs font-bold border transition-colors ${
-                                        orde === op.v
+                                    onClick={() => setOrde(v)}
+                                    className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold border transition-colors ${
+                                        orde === v
                                             ? 'bg-primary text-primary-foreground border-primary'
                                             : 'bg-card text-muted-foreground hover:bg-muted'
                                     }`}
                                 >
-                                    {op.label}
+                                    <Icon className="w-3.5 h-3.5 shrink-0" /> {label}
                                 </button>
                             ))}
                         </div>

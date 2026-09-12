@@ -5,6 +5,7 @@ import { FotosClient } from '@/components/FotosClient';
 import { AudiosClient } from '@/components/AudiosClient';
 import type { AudioPena, Foto } from '@/app/actions';
 import { cn } from '@/lib/utils';
+import { Images, Music, type LucideIcon } from 'lucide-react';
 
 /**
  * Fotos e audios comparten sección en vez de pestana propia no menú: a barra de
@@ -25,17 +26,20 @@ export function RecuerdosTabs({
 }) {
     const [tab, setTab] = useState<'fotos' | 'audios'>('fotos');
 
-    const boton = (id: 'fotos' | 'audios', etiqueta: string, n: number) => (
+    // O mesmo icono que leva a pestana de Fotos no menú de abaixo, para que
+    // sexa a mesma cousa nos dous sitios.
+    const boton = (id: 'fotos' | 'audios', etiqueta: string, Icon: LucideIcon, n: number) => (
         <button
             type="button"
             onClick={() => setTab(id)}
             className={cn(
-                "flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition-colors",
+                "flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition-colors",
                 tab === id
                     ? "bg-primary text-primary-foreground shadow-sm"
                     : "text-muted-foreground hover:bg-muted",
             )}
         >
+            <Icon className="w-4 h-4 shrink-0" />
             {etiqueta}
             {n > 0 && (
                 <span className={cn("ml-1.5 text-xs font-bold", tab === id ? "opacity-80" : "opacity-60")}>
@@ -48,8 +52,8 @@ export function RecuerdosTabs({
     return (
         <div className="space-y-5">
             <div className="flex gap-1 bg-muted/60 border rounded-xl p-1 max-w-xs mx-auto">
-                {boton('fotos', '📸 Fotos', fotos.length)}
-                {boton('audios', '🎵 Audios', audios.length)}
+                {boton('fotos', 'Fotos', Images, fotos.length)}
+                {boton('audios', 'Audios', Music, audios.length)}
             </div>
 
             {tab === 'fotos'
