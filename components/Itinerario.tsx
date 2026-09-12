@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { ITINERARIO, ITINERARIO_PROVISIONAL, type ItinerarioDia } from '@/lib/itinerario';
 import { buscarLugar, mapaUrl, mapsUrl, type LugaresGardados } from '@/lib/lugares';
@@ -65,6 +65,29 @@ export function Itinerario({ lugares = {} }: { lugares?: LugaresGardados }) {
     const [now, setNow] = useState<number | null>(null);
     const [activeIdx, setActiveIdx] = useState(0);
 
+    // Ao abrir a portada ás sete da tarde ninguén quere baixar buscando por
+    // onde vai a festa: lévase a pantalla soa ao acto de agora. Só a primeira
+    // vez; se despois escolles ti outro día, non se move nada.
+    const actoActual = useRef<HTMLLIElement | null>(null);
+    const chipActivo = useRef<HTMLButtonElement | null>(null);
+    const xaCentrado = useRef(false);
+
+    useEffect(() => {
+        if (now === null || xaCentrado.current) return;
+        const acto = actoActual.current;
+        if (!acto) return;   // non é un día da festa, ou xa rematou
+        xaCentrado.current = true;
+        // Un cadro de espera: o banner de avisos e o resto da portada aínda
+        // están asentando, e se mides antes quedas a medio acto.
+        const id = requestAnimationFrame(() => {
+            // O selector de días desprázase en horizontal: 'nearest' no bloque
+            // para que iso non mova tamén a páxina enteira.
+            chipActivo.current?.scrollIntoView({ inline: 'center', block: 'nearest' });
+            acto.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+        return () => cancelAnimationFrame(id);
+    }, [now]);
+
     useEffect(() => {
         const tick = () => setNow(Date.now());
         tick();
@@ -118,6 +141,12 @@ export function Itinerario({ lugares = {} }: { lugares?: LugaresGardados }) {
         return t === times[nextIdx - 1] ? 'agora' : 'pasado';
     };
 
+    // A que acto se leva a pantalla: o que está en curso e, se non hai ningún,
+    // o seguinte. Fóra do día de hoxe non se move nada.
+    const idxDestacado = esHoxe
+        ? dia.eventos.findIndex((_, i) => estadoDe(i) === 'agora' || estadoDe(i) === 'proximo')
+        : -1;
+
     return (
         <section className="max-w-xl mx-auto mt-8 text-left">
             <div className="flex items-center justify-center gap-2 mb-4">
@@ -142,6 +171,7 @@ export function Itinerario({ lugares = {} }: { lugares?: LugaresGardados }) {
                     return (
                         <button
                             key={d.fecha}
+                            ref={i === activeIdx ? chipActivo : undefined}
                             onClick={() => setActiveIdx(i)}
                             className={cn(
                                 "shrink-0 snap-start flex flex-col items-center justify-center px-3 py-2 rounded-xl border min-w-[62px] transition-colors",
@@ -182,7 +212,11 @@ export function Itinerario({ lugares = {} }: { lugares?: LugaresGardados }) {
                 {dia.eventos.map((ev, i) => {
                     const estado = estadoDe(i);
                     return (
-                        <li key={i} className="relative ml-6">
+                        <li
+                            key={i}
+                            ref={i === idxDestacado ? actoActual : undefined}
+                            className="relative ml-6 scroll-mt-24"
+                        >
                             {/* La línea, que va llenándose. En el acto en curso
                                 llega justo por donde vamos: un 18:00-20:00 a las
                                 19:00 la deja por la mitad del recuadro. */}
