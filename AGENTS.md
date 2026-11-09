@@ -128,6 +128,8 @@ components/
   ResumoVista.tsx       # el dibujo de /resumo (recibe un `Resumo` ya calculado)
   MeuResumo.tsx         # «A túa Guadalupe»: tus fotos y sus 🔥 (anon_id, solo lectura)
   BotonCompartir.tsx    # compartir la página (Web Share; si no hay, copia el enlace)
+  ForaDeTempada.tsx     # portada cuando la fiesta ya pasó: días para la siguiente +
+                        #   accesos al resumen y a las fotos (no pinta nada antes/durante)
   BoletoTicket.tsx      # réplica del boleto de la camiseta (blanco + azul marino)
   BoletoForm.tsx        # crear tu boleto de broma (cuota total en vivo)
   BoletoList.tsx        # boletos de la peña + borrado de admin
@@ -306,7 +308,9 @@ store Blob). PENDIENTE: confirmar si conviene crear un `.env.example`.
    `lib/festas.ts`: de él y de `DIAS_FESTA` sale si estamos antes, durante o
    después de la fiesta). Para el año siguiente, mientras no haya cartel,
    `proximaGuadalupe()` ESTIMA el inicio (primer viernes desde el 8 de
-   septiembre) y la UI lo enseña siempre como «data aproximada».
+   septiembre) y la UI lo enseña siempre como «data aproximada». Pasada la
+   fiesta, la home cambia sola: sale `ForaDeTempada` y `Itinerario` pliega el
+   programa en un botón («Programa da festa 2026 · rematado»).
 16. **LupeBet:** el boleto oficial son DATOS en `lib/lupebet.ts`, no Redis —
     es el de la camiseta y se copia tal cual, faltas incluidas ("Janador",
     "veses"), que son el chiste. Su cuota total impresa (28,12) NO es el

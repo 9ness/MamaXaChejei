@@ -5,8 +5,9 @@ import { useNow } from '@/lib/use-now';
 import Link from 'next/link';
 import { ITINERARIO, ITINERARIO_PROVISIONAL, type ItinerarioDia } from '@/lib/itinerario';
 import { buscarLugar, mapaUrl, mapsUrl, type LugaresGardados } from '@/lib/lugares';
+import { ANO_FESTA, faseDaFesta } from '@/lib/festas';
 import { cn } from '@/lib/utils';
-import { CalendarDays, MapPin, Clock, Map as MapIcon, Navigation } from 'lucide-react';
+import { CalendarDays, ChevronRight, MapPin, Clock, Map as MapIcon, Navigation } from 'lucide-react';
 
 type EstadoEvento = 'pasado' | 'agora' | 'proximo' | 'futuro';
 
@@ -77,6 +78,9 @@ export function Itinerario({ lugares = {} }: { lugares?: LugaresGardados }) {
     // noite, non che cambia o día debaixo do dedo. No servidor non importa o
     // valor: con now === null non se pinta nada.
     const [activeIdx, setActiveIdx] = useState(indiceDeHoxe);
+    // Pasada a festa o programa vai pregado: segue aí para quen queira
+    // repasalo, pero xa non é o que se vén mirar á portada.
+    const [aberto, setAberto] = useState(false);
 
     // Ao abrir a portada ás sete da tarde ninguén quere baixar buscando por
     // onde vai a festa: lévase a pantalla soa ao acto de agora. Só a primeira
@@ -102,6 +106,23 @@ export function Itinerario({ lugares = {} }: { lugares?: LugaresGardados }) {
     }, [now]);
 
     if (now === null) return null; // evita hidratación desajustada
+
+    if (faseDaFesta(now) === 'despois' && !aberto) {
+        return (
+            <section className="max-w-xl mx-auto mt-4 text-left">
+                <button
+                    type="button"
+                    onClick={() => setAberto(true)}
+                    className="w-full flex items-center gap-2 rounded-lg border bg-card shadow-sm px-4 py-3 text-left"
+                >
+                    <ChevronRight className="w-4 h-4 shrink-0 text-muted-foreground" />
+                    <CalendarDays className="w-4 h-4 shrink-0 text-primary" />
+                    <span className="text-sm font-semibold">Programa da festa {ANO_FESTA}</span>
+                    <span className="ml-auto shrink-0 text-xs text-muted-foreground">rematado</span>
+                </button>
+            </section>
+        );
+    }
 
     const dia = ITINERARIO[activeIdx];
     const times = dia.eventos.map(e => eventoDate(dia, e.hora));

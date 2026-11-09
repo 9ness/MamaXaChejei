@@ -16,3 +16,4 @@
 - 2026-11-09 · Chat atómico con Lua + emoji validado + rate limit (ee73f68).
 - 2026-11-09 · Vitest: 68 tests (lógica de lib/, auth, rate limit y Lua contra redis-server).
 - 2026-11-09 · `/resumo`: «A Guadalupe en cifras» (cifras, podio de fotos, fotos por xornada, xogo, LupeBet, canción) + 13 tests (rama `fable/2026-11-09`).
+- 2026-11-09 · Portada fóra de tempada: días para a Guadalupe 2027 (data aproximada), accesos ao resumo e ás fotos, e o programa pasado plegado (rama `fable/2026-11-09`).
