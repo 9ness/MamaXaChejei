@@ -47,3 +47,63 @@ export function diaDaFoto(ts: number): string {
 export function diaDeHoxe(agora: number): string {
     return diaDaFoto(agora);
 }
+
+// --- EN QUE MOMENTO DO ANO ESTAMOS ---
+
+/** O ano do cartel que leva a app dentro (lib/itinerario.ts). */
+export const ANO_FESTA = 2026;
+
+const INICIO_FESTA = Date.parse(DIAS_FESTA[0].ata as string);
+const FIN_FESTA = Date.parse(DIAS_FESTA[DIAS_FESTA.length - 2].ata as string);
+
+export type FaseFesta = 'antes' | 'durante' | 'despois';
+
+/**
+ * Antes, durante ou despois da Guadalupe do cartel. A portada non pode ser a
+ * mesma en novembro que o sábado da festa: pasada a derradeira xornada, o
+ * programa enteiro en gris non lle di nada a ninguén.
+ */
+export function faseDaFesta(agora: number): FaseFesta {
+    if (agora < INICIO_FESTA) return 'antes';
+    return agora < FIN_FESTA ? 'durante' : 'despois';
+}
+
+/**
+ * O día de setembro no que arranca a Guadalupe dun ano: o primeiro venres a
+ * partir do día 8 (a festa da Virxe). Cadra cos carteis de 2023 (8), 2024
+ * (13), 2025 (12) e 2026 (11), pero é unha REGRA, non o cartel: o que saia
+ * de aquí hai que ensinalo sempre como data aproximada.
+ */
+export function venresDaGuadalupe(ano: number): number {
+    const diaDaSemana = new Date(Date.UTC(ano, 8, 8)).getUTCDay(); // 5 = venres
+    return 8 + ((5 - diaDaSemana + 7) % 7);
+}
+
+export interface ProximaGuadalupe {
+    ano: number;
+    /** Día de setembro (venres) no que empeza. */
+    dia: number;
+    /** As 00:00 dese venres, hora de Galicia. */
+    inicio: number;
+    /** true = sae da regra do venres e non dun cartel publicado. */
+    estimada: boolean;
+}
+
+/** A seguinte Guadalupe que aínda non rematou, vista desde `agora`. */
+export function proximaGuadalupe(agora: number): ProximaGuadalupe {
+    const calcular = (ano: number): ProximaGuadalupe & { fin: number } => {
+        const dia = venresDaGuadalupe(ano);
+        const inicio = Date.parse(`${ano}-09-${String(dia).padStart(2, '0')}T00:00:00+02:00`);
+        // Oito días e pico, coma a deste ano: ata o sábado seguinte pola mañá.
+        return { ano, dia, inicio, fin: inicio + (FIN_FESTA - INICIO_FESTA), estimada: ano !== ANO_FESTA };
+    };
+
+    let p = calcular(new Date(agora).getUTCFullYear());
+    if (agora >= p.fin) p = calcular(p.ano + 1);
+    return { ano: p.ano, dia: p.dia, inicio: p.inicio, estimada: p.estimada };
+}
+
+/** Días enteiros que faltan (cara arriba: a 3 horas da festa "falta 1 día"). */
+export function diasAta(inicio: number, agora: number): number {
+    return Math.max(0, Math.ceil((inicio - agora) / 86_400_000));
+}

@@ -1,3 +1,5 @@
+import Link from 'next/link';
+import { BarChart3 } from 'lucide-react';
 import { Header } from '@/components/Header';
 import { RecuerdosTabs } from '@/components/RecuerdosTabs';
 import { getAudios, getFotos, getLikes, getLikesAudios } from '@/app/actions';
@@ -22,6 +24,12 @@ export default async function RecuerdosPage() {
                     <p className="text-sm text-muted-foreground mt-1">
                         O mural da peña. Sube as túas fotos e as cancións que saian.
                     </p>
+                    <Link
+                        href="/resumo"
+                        className="inline-flex items-center gap-1.5 mt-2 text-xs font-bold text-primary underline underline-offset-2"
+                    >
+                        <BarChart3 className="w-3.5 h-3.5" /> A festa en cifras
+                    </Link>
                 </div>
 
                 <RecuerdosTabs

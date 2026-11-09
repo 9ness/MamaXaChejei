@@ -109,6 +109,8 @@ app/
   admin/actions.ts    # setupPin/loginWithPin/enable|disableAdminMode/changePin/logout
   mapa/page.tsx       # mapa Leaflet (MapaClient)
   recuerdos/page.tsx  # mural de fotos
+  resumo/page.tsx     # «A Guadalupe en cifras»: el resumen de la fiesta. Solo LEE (los
+                      #   mismos getters de Recordos y LupeBet), ninguna key nueva
   lupebet/page.tsx    # LupeBet: boleto oficial de la camiseta + los de la peña
   lupebet/[id]/page.tsx       # ficha de un boleto (URL propia para compartir)
   api/og/lupebet/route.tsx    # imagen del boleto (la que se comparte)
@@ -123,6 +125,9 @@ components/
   Itinerario.tsx, Countdown.tsx, Header.tsx, BottomNav.tsx,
   AnnouncementForm.tsx, AnnouncementBanner.tsx, AdminControls.tsx,
   PenaColorPicker.tsx, LoginForm.tsx, FotosClient.tsx,
+  ResumoVista.tsx       # el dibujo de /resumo (recibe un `Resumo` ya calculado)
+  MeuResumo.tsx         # «A túa Guadalupe»: tus fotos y sus 🔥 (anon_id, solo lectura)
+  BotonCompartir.tsx    # compartir la página (Web Share; si no hay, copia el enlace)
   BoletoTicket.tsx      # réplica del boleto de la camiseta (blanco + azul marino)
   BoletoForm.tsx        # crear tu boleto de broma (cuota total en vivo)
   BoletoList.tsx        # boletos de la peña + borrado de admin
@@ -150,6 +155,9 @@ lib/
   nome-chat.ts        # nombre del chat guardado en localStorage (hook)
   avisos.ts           # insignias del menú: un solo sondeo (BottomNav) repartido
   tempo.ts            # "fai 2 horas" / fecha, para las fotos
+  festas.ts           # jornadas de fotos (corte 08:00) + fase del año: antes/durante/
+                      #   despois de la fiesta, `ANO_FESTA` y la próxima Guadalupe
+  resumo.ts           # calcularResumo(): cuentas puras del resumen (sin Redis)
   fotos.ts            # id de una foto (nombre del fichero en Blob)
   utils.ts            # cn()
 scripts/              # tsx sueltos contra Redis (seed / reset récord)
@@ -294,7 +302,11 @@ store Blob). PENDIENTE: confirmar si conviene crear un `.env.example`.
    organiza, colabora, patrocina). La fecha objetivo de la cuenta atrás está
    **hardcodeada** en `components/Countdown.tsx` (`TARGET_DATE`,
    `2026-09-12T00:00:00`, el Chupitaso) y los cortes de las jornadas de fotos en `lib/festas.ts`: si
-   cambia el cartel hay que tocar los TRES sitios.
+   cambia el cartel hay que tocar los TRES sitios (y `ANO_FESTA`, también en
+   `lib/festas.ts`: de él y de `DIAS_FESTA` sale si estamos antes, durante o
+   después de la fiesta). Para el año siguiente, mientras no haya cartel,
+   `proximaGuadalupe()` ESTIMA el inicio (primer viernes desde el 8 de
+   septiembre) y la UI lo enseña siempre como «data aproximada».
 16. **LupeBet:** el boleto oficial son DATOS en `lib/lupebet.ts`, no Redis —
     es el de la camiseta y se copia tal cual, faltas incluidas ("Janador",
     "veses"), que son el chiste. Su cuota total impresa (28,12) NO es el
