@@ -22,6 +22,7 @@ import {
 } from '@/lib/lupebet';
 import { fotoId } from '@/lib/fotos';
 import { basePorId, emojiValido, type LugarGardado, type LugaresGardados } from '@/lib/lugares';
+import { esPenaColor } from '@/lib/pena-colors';
 import { revalidatePath, unstable_noStore as noStore } from 'next/cache';
 import { z } from 'zod';
 
@@ -199,7 +200,7 @@ export async function bulkAddMembers(textData: string) {
 
         for (const item of pendingMembers) {
             // Clean "-->", "->", "-", "—>", "—" separators (Em dash, En dash)
-            let cleanLine = item.data.replace(/[-—–]+>/g, ' ').replace(/[-—–]/g, ' ');
+            const cleanLine = item.data.replace(/[-—–]+>/g, ' ').replace(/[-—–]/g, ' ');
 
             // Regex strategies for Talla
             // 1. Explicit "Talla X" (e.g. "Carmen ... Talla 2")
@@ -279,7 +280,7 @@ export async function bulkAddMembers(textData: string) {
                 nombre,
                 apellido1,
                 apellido2: apellido2 || '',
-                talla: talla as any,
+                talla,
                 pagado: false,
                 fechaPagado: '',
                 recogido: false,
@@ -522,6 +523,8 @@ export async function getPenaColor(): Promise<string> {
 
 export async function setPenaColor(key: string) {
     if (!(await isAdminRequest())) return { success: false, error: 'No autorizado' };
+    // Solo presets: el valor acaba inyectado en el <head> de todas las páginas.
+    if (!esPenaColor(key)) return { success: false, error: 'Color non válido' };
 
     try {
         await redis.set(PENA_COLOR_KEY, key);

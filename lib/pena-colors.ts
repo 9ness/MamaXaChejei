@@ -108,8 +108,14 @@ export const PENA_PRESETS: Record<PenaColorKey, PenaPreset> = {
     },
 };
 
+/** ¿Es una key de preset? `hasOwn` y no `in`: con `in`, "toString" o
+ *  "constructor" colaban una función del prototipo y el layout petaba. */
+export function esPenaColor(key: unknown): key is PenaColorKey {
+    return typeof key === 'string' && Object.hasOwn(PENA_PRESETS, key);
+}
+
 export function getPenaPreset(key?: string | null): PenaPreset {
-    if (key && key in PENA_PRESETS) return PENA_PRESETS[key as PenaColorKey];
+    if (esPenaColor(key)) return PENA_PRESETS[key];
     return PENA_PRESETS[DEFAULT_PENA_COLOR];
 }
 

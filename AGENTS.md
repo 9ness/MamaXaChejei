@@ -50,7 +50,7 @@ admin cambia y tiñe toda la UI vía variables CSS.
 TypeScript (strict) · Tailwind 3.4 + shadcn/ui (style new-york, baseColor
 neutral) + Radix + lucide-react · Upstash Redis (`@upstash/redis`, REST) ·
 Vercel Blob (`@vercel/blob`) · Leaflet · Zod · canvas-confetti · tsx para
-scripts. Sin tests, sin CI (no hay `.github/`).
+scripts · Vitest (tests de `lib/` y de los Lua del chat). Sin CI (no hay `.github/`).
 
 ---
 
@@ -64,6 +64,7 @@ npm run dev      # next dev  → http://localhost:3000
 npm run build    # next build
 npm run start    # next start
 npm run lint     # eslint (flat config: eslint.config.mjs)
+npm test         # vitest run (tests/*.test.ts)
 ```
 
 Typecheck (no hay script en package.json; el usuario lo permite en
@@ -80,7 +81,13 @@ npx tsx scripts/force-reset-score.ts  # reset del récord + verificación por co
 npx tsx scripts/set-admin-pin.ts 1234 # pone el PIN de admin y cierra sesiones abiertas
 ```
 
-**Tests:** no existen. **CI:** no existe. PENDIENTE: confirmar si se quieren.
+**Tests:** `npm test` (= `vitest run`, ~4 s). Viven en `tests/*.test.ts`,
+config en `vitest.config.mts` (alias `@`, TZ Europe/Madrid). Cubren la lógica
+pura (`lib/lupebet`, `lib/chat`, festas, tempo, lugares, paleta, Countdown),
+`rate-limit` y `admin-auth` con Redis simulado (`vi.mock('@/lib/redis')`), y
+`tests/chat-lua.test.ts` corre los Lua del chat contra un `redis-server` LOCAL
+efímero (puerto al azar, sin disco; se salta si no está instalado). Nunca
+tocan Upstash. **CI:** no existe.
 **Deploy:** Vercel (el `.claude/settings.local.json` permite `npx vercel *`, y
 `@vercel/blob` es dependencia). No hay `vercel.json`. PENDIENTE: confirmar
 proyecto/comando exacto de despliegue.
@@ -105,9 +112,8 @@ app/
   lupebet/page.tsx    # LupeBet: boleto oficial de la camiseta + los de la peña
   lupebet/[id]/page.tsx       # ficha de un boleto (URL propia para compartir)
   api/og/lupebet/route.tsx    # imagen del boleto (la que se comparte)
-  api/chat/route.ts   # GET/POST/DELETE/PATCH del chat (pin, unpin, react)
+  api/chat/route.ts   # GET/POST/DELETE/PATCH del chat (pin, unpin, react) → lib/chat.ts
   api/fotos/upload/route.ts   # handleUpload de Vercel Blob (fotos Y audios)
-  api/debug/reset-score/route.ts  # ⚠️ reset del récord por GET, SIN AUTH
   globals.css         # variables CSS de shadcn (light/dark)
 components/
   MemberTable.tsx (516) MemberList.tsx (311) MemberCard.tsx   # lista/edición miembros
@@ -138,6 +144,10 @@ lib/
   admin-pin.ts        # PIN de admin en Redis (scrypt + salt)
   admin-pin-config.ts # constantes del PIN compartidas con el cliente
   rate-limit.ts       # ventana fija sobre Redis + IP del cliente
+  chat.ts             # mensajes del chat en Redis; borrar/reaccionar en Lua atómico
+  chat-config.ts      # reacciones válidas y tope de la lista (también en cliente)
+  use-now.ts          # useNow(ms): la hora sin useEffect (useSyncExternalStore)
+  nome-chat.ts        # nombre del chat guardado en localStorage (hook)
   avisos.ts           # insignias del menú: un solo sondeo (BottomNav) repartido
   tempo.ts            # "fai 2 horas" / fecha, para las fotos
   fotos.ts            # id de una foto (nombre del fichero en Blob)
@@ -156,7 +166,8 @@ public/               # sprites del juego (man*.png, ~2 MB cada uno)
 | `fiesta:anuncio` | STRING | texto del banner |
 | `fiesta:chat` | LIST | últimos 50 mensajes (LPUSH + LTRIM 0 49) |
 | `fiesta:chat:pinned` | STRING | mensaje fijado |
-| `fiesta:highscore` | STRING | `{name, score}` (escrito con Lua atómico) |
+| `fiesta:xogo_top` | ZSET | ranking del juego: nombre → mejor marca (`ZADD GT`) |
+| `fiesta:highscore` | STRING | récord viejo `{name, score}`, ya no se escribe |
 | `fiesta:total_games` | STRING | contador INCR |
 | `fiesta:color` | STRING | key del preset de paleta |
 | `fiesta:fotos` | LIST | fotos del mural (JSON `{url, ts, titulo?}`) |
@@ -242,12 +253,13 @@ store Blob). PENDIENTE: confirmar si conviene crear un `.env.example`.
    con él NO puebla la lista de la app, y además borra su propia key antes.
    No lo uses como referencia del schema — la referencia es `app/actions.ts`.
    PENDIENTE: confirmar si se arregla o se borra.
-3. **`GET /api/debug/reset-score` no tiene auth**: cualquiera con la URL borra
-   el récord del juego. PENDIENTE: confirmar si se protege o se elimina.
-4. **El "admin" del chat es cosmético**: `GlobalChat.tsx` deduce `isAdmin` de
-   `pathname === '/gestion'` y lo manda en el body; `app/api/chat/route.ts` se
-   fía de ese flag sin comprobar la cookie. DELETE y PATCH (pin/unpin/react)
-   tampoco verifican auth. No asumas que el chat está protegido.
+3. **`/api/debug/reset-score` ya no existe** (era un GET sin auth que borraba
+   el récord). Para resetearlo, los scripts de `scripts/`.
+4. **Chat: el admin sale de la cookie** (`isAdmin()`), nunca del body. DELETE,
+   pin y unpin son solo de admin; reaccionar es libre pero solo con las 6
+   reacciones de `lib/chat-config.ts`. Publicar está limitado a 40/min por IP
+   (salvo admin) y reaccionar a 120/min → 429. Toda la lógica de Redis del
+   chat vive en `lib/chat.ts`, no en la ruta.
 5. **Auth: DOS cookies firmadas** (httpOnly, valor `<caducidad>.<HMAC>`, el
    scope entra en la firma), secreto en `fiesta:admin_secret`:
    `auth` (7 días) = modo admin encendido AHORA; `admin_device` (1 año) = este
@@ -263,10 +275,12 @@ store Blob). PENDIENTE: confirmar si conviene crear un `.env.example`.
    sigue valiendo como respaldo mientras no haya PIN. Login limitado a 10
    intentos / 15 min por IP (`lib/rate-limit.ts`), con reset al acertar.
    "Salir" de `/gestion` borra las DOS cookies (desautoriza el móvil).
-6. **Chat: borrar/reaccionar reescribe la lista entera** (LRANGE → filtrar →
-   DEL → RPUSH). No es atómico y hay carrera si dos escriben a la vez. El
-   récord del juego SÍ usa un script Lua atómico (`saveHighScore`) —
-   respétalo, se hizo a propósito.
+6. **Chat: borrar y reaccionar son scripts Lua** (`LUA_BORRAR`,
+   `LUA_REACCIONAR` en `lib/chat.ts`): buscan el mensaje y hacen LREM / LSET
+   en su sitio, de una pieza. NO vuelvas al LRANGE → DEL → RPUSH desde el
+   servidor: perdía los mensajes publicados en medio. Si tocas un Lua, pasa
+   `npm test` (los prueba contra Redis real). El récord del juego va en un
+   ZSET con `ZADD GT` (`saveHighScore`): atómico sin leer antes.
 7. **Los booleanos de Redis vuelven como string**: `getMembers()` hace
    `String(m.pagado) === 'true'`. Cualquier campo booleano nuevo necesita el
    mismo tratamiento al leer del HASH.
@@ -278,8 +292,8 @@ store Blob). PENDIENTE: confirmar si conviene crear un `.env.example`.
    (`ITINERARIO_PROVISIONAL = false`). Cada acto puede llevar `lugar` (el sitio,
    sale con chincheta y algún día irá al mapa) y `nota` (la letra pequeña:
    organiza, colabora, patrocina). La fecha objetivo de la cuenta atrás está
-   **hardcodeada** en `components/Countdown.tsx` (`2026-09-11T22:00:00`, el
-   primer acto) y los cortes de las jornadas de fotos en `lib/festas.ts`: si
+   **hardcodeada** en `components/Countdown.tsx` (`TARGET_DATE`,
+   `2026-09-12T00:00:00`, el Chupitaso) y los cortes de las jornadas de fotos en `lib/festas.ts`: si
    cambia el cartel hay que tocar los TRES sitios.
 16. **LupeBet:** el boleto oficial son DATOS en `lib/lupebet.ts`, no Redis —
     es el de la camiseta y se copia tal cual, faltas incluidas ("Janador",
@@ -363,7 +377,9 @@ store Blob). PENDIENTE: confirmar si conviene crear un `.env.example`.
     juego, no añadas más peso sin optimizar.
 15. **La paleta se inyecta con `dangerouslySetInnerHTML`** en el `<head>` desde
     un valor de Redis. Solo puede venir de los presets de `lib/pena-colors.ts`
-    — no dejes que llegue ahí texto libre del usuario.
+    — no dejes que llegue ahí texto libre del usuario. Valida con
+    `esPenaColor()` (`Object.hasOwn`, no `in`: con `in`, "constructor" pasaba
+    y el layout petaba en todas las páginas).
 
 ---
 
@@ -383,7 +399,7 @@ store Blob). PENDIENTE: confirmar si conviene crear un `.env.example`.
   las env vars de Vercel. `.gitignore` ya bloquea `.env*` — no lo debilites.
   Claves en juego: `UPSTASH_REDIS_REST_URL`/`TOKEN`, `ADMIN_PASSWORD`,
   `BLOB_READ_WRITE_TOKEN`.
-- **Verifica antes de dar por hecho un cambio:** `npx tsc --noEmit` y
-  `npm run lint` (no hay tests que te cubran).
+- **Verifica antes de dar por hecho un cambio:** `npm test`, `npx tsc --noEmit`
+  y `npm run lint`. Los tests cubren la lógica de `lib/`, no la UI.
 - **Ante cualquier duda, pregunta.** No inventes rutas, keys ni comandos.
 - **Mantén un LEARNINGS.md con 1 línea por bug/aprendizaje resuelto.**
