@@ -8,8 +8,9 @@ import { fotoId } from '@/lib/fotos';
 import { DIAS_FESTA, diaDaFoto } from '@/lib/festas';
 import { Cando } from '@/components/Cando';
 import { Button } from '@/components/ui/button';
-import { CalendarDays, Camera, Clock, Flame, ImagePlus, Loader2, Trash2, X } from 'lucide-react';
+import { CalendarDays, Camera, ChevronLeft, ChevronRight, Clock, Flame, ImagePlus, Loader2, Play, Trash2, X } from 'lucide-react';
 import { BotonLume } from '@/components/BotonLume';
+import { PaseFotos } from '@/components/PaseFotos';
 import { Input } from '@/components/ui/input';
 
 // --- COMPRESIÓN EN EL MÓVIL ---
@@ -109,6 +110,9 @@ export function FotosClient({
     const [progress, setProgress] = useState('');
     const [error, setError] = useState('');
     const [lightbox, setLightbox] = useState<Foto | null>(null);
+    // Onde empezou o dedo no visor, para pasar de foto arrastrando.
+    const toqueVisor = useRef<number | null>(null);
+    const [pase, setPase] = useState(false);
     // Lo elegido pero aún sin subir: así se puede ponerle un pie antes de que
     // se vaya. Si no se escribe nada, se sube igual.
     const [pendentes, setPendentes] = useState<File[]>([]);
@@ -244,6 +248,31 @@ export function FotosClient({
         : orde === 'dias'
             ? fotos.filter((f) => diaDaFoto(f.ts) === diaActivo)
             : fotos;
+
+    // O visor pasa de foto dentro do que se está vendo (a orde e a xornada
+    // escollidas), sen dar a volta ao chegar ao final.
+    const idxVisor = lightbox ? listadas.findIndex((f) => f.url === lightbox.url) : -1;
+    const moverVisor = (paso: number) => {
+        const outra = idxVisor < 0 ? undefined : listadas[idxVisor + paso];
+        if (outra) setLightbox(outra);
+    };
+
+    // Sen lista de dependencias a propósito: `moverVisor` cambia en cada
+    // render (depende da orde e dos 🔥) e só hai escoita co visor aberto.
+    useEffect(() => {
+        if (!lightbox) return;
+        const tecla = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setLightbox(null);
+            else if (e.key === 'ArrowRight') moverVisor(1);
+            else if (e.key === 'ArrowLeft') moverVisor(-1);
+        };
+        window.addEventListener('keydown', tecla);
+        return () => window.removeEventListener('keydown', tecla);
+    });
+
+    // O pase vai da máis vella á máis nova (a festa tal como foi), menos en
+    // "Gustadas", que empeza polas que máis prenderon.
+    const fotosPase = orde === 'likes' ? listadas : [...listadas].reverse();
 
     const limpiaInputs = () => {
         // Se limpian los dos: si no, elegir la misma foto otra vez no dispara
@@ -464,10 +493,21 @@ export function FotosClient({
                         </div>
                     )}
 
-                    <p className="text-center text-[11px] text-muted-foreground">
-                        Recordos totais: <span className="font-bold text-foreground">{fotos.length}</span>
-                        {orde === 'dias' && ` · ${listadas.length} nesta xornada`}
-                    </p>
+                    <div className="flex items-center justify-center gap-3 flex-wrap">
+                        <p className="text-[11px] text-muted-foreground">
+                            Recordos totais: <span className="font-bold text-foreground">{fotos.length}</span>
+                            {orde === 'dias' && ` · ${listadas.length} nesta xornada`}
+                        </p>
+                        {listadas.length > 1 && (
+                            <button
+                                type="button"
+                                onClick={() => setPase(true)}
+                                className="inline-flex items-center gap-1.5 rounded-md border bg-card px-2.5 py-1 text-xs font-bold text-primary shadow-sm active:scale-95 transition-transform"
+                            >
+                                <Play className="w-3.5 h-3.5 fill-current" /> Pase de fotos
+                            </button>
+                        )}
+                    </div>
 
                     {/* Rejilla de verdad y no columnas CSS: así SIEMPRE entran dos
                         por fila, por estrecho que sea el móvil, y el mural se ve
@@ -552,11 +592,43 @@ export function FotosClient({
             {lightbox && (
                 <div
                     onClick={() => setLightbox(null)}
-                    className="fixed inset-0 z-[80] bg-black/90 flex flex-col items-center justify-center p-4 animate-in fade-in"
+                    onTouchStart={(e) => { toqueVisor.current = e.touches[0].clientX; }}
+                    onTouchEnd={(e) => {
+                        if (toqueVisor.current === null) return;
+                        const dx = e.changedTouches[0].clientX - toqueVisor.current;
+                        toqueVisor.current = null;
+                        if (Math.abs(dx) >= 45) moverVisor(dx < 0 ? 1 : -1);
+                    }}
+                    className="fixed inset-0 z-[80] !mt-0 bg-black/90 flex flex-col items-center justify-center p-4 animate-in fade-in"
                 >
-                    <button className="absolute top-4 right-4 text-white/80 hover:text-white" onClick={() => setLightbox(null)}>
+                    <button
+                        type="button"
+                        aria-label="Pechar"
+                        className="absolute top-4 right-4 z-10 text-white/80 hover:text-white"
+                        onClick={() => setLightbox(null)}
+                    >
                         <X className="w-8 h-8" />
                     </button>
+                    {idxVisor > 0 && (
+                        <button
+                            type="button"
+                            aria-label="Foto anterior"
+                            onClick={(e) => { e.stopPropagation(); moverVisor(-1); }}
+                            className="absolute left-1 top-1/2 -translate-y-1/2 z-10 p-2 rounded-md text-white/70 hover:text-white hover:bg-white/10"
+                        >
+                            <ChevronLeft className="w-8 h-8" />
+                        </button>
+                    )}
+                    {idxVisor >= 0 && idxVisor < listadas.length - 1 && (
+                        <button
+                            type="button"
+                            aria-label="Foto seguinte"
+                            onClick={(e) => { e.stopPropagation(); moverVisor(1); }}
+                            className="absolute right-1 top-1/2 -translate-y-1/2 z-10 p-2 rounded-md text-white/70 hover:text-white hover:bg-white/10"
+                        >
+                            <ChevronRight className="w-8 h-8" />
+                        </button>
+                    )}
                     <span
                         className="relative inline-flex"
                         onClick={(e) => {
@@ -570,6 +642,7 @@ export function FotosClient({
                     >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
+                            key={lightbox.url}
                             src={lightbox.url}
                             alt={lightbox.titulo || 'Recordo'}
                             className="max-w-full max-h-[85vh] rounded-lg object-contain"
@@ -598,6 +671,8 @@ export function FotosClient({
                     </span>
                 </div>
             )}
+
+            {pase && <PaseFotos fotos={fotosPase} onClose={() => setPase(false)} />}
 
         </div>
     );

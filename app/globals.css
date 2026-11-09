@@ -217,3 +217,16 @@
 @media (prefers-reduced-motion: reduce) {
   .mxc-lume-grande { animation: none; opacity: 0; }
 }
+
+/* Pase de fotos: a barra de arriba énchese mentres dura cada foto. */
+@keyframes mxc-pase-barra {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+.mxc-pase-barra {
+  transform-origin: left;
+  animation: mxc-pase-barra linear forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mxc-pase-barra { animation: none; }
+}

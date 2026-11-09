@@ -83,7 +83,8 @@ npx tsx scripts/set-admin-pin.ts 1234 # pone el PIN de admin y cierra sesiones a
 
 **Tests:** `npm test` (= `vitest run`, ~4 s). Viven en `tests/*.test.ts`,
 config en `vitest.config.mts` (alias `@`, TZ Europe/Madrid). Cubren la lógica
-pura (`lib/lupebet`, `lib/chat`, festas, tempo, lugares, paleta, Countdown),
+pura (`lib/lupebet`, `lib/chat`, `lib/resumo`, festas, tempo, lugares, paleta,
+Countdown),
 `rate-limit` y `admin-auth` con Redis simulado (`vi.mock('@/lib/redis')`), y
 `tests/chat-lua.test.ts` corre los Lua del chat contra un `redis-server` LOCAL
 efímero (puerto al azar, sin disco; se salta si no está instalado). Nunca
@@ -128,6 +129,8 @@ components/
   ResumoVista.tsx       # el dibujo de /resumo (recibe un `Resumo` ya calculado)
   MeuResumo.tsx         # «A túa Guadalupe»: tus fotos y sus 🔥 (anon_id, solo lectura)
   BotonCompartir.tsx    # compartir la página (Web Share; si no hay, copia el enlace)
+  PaseFotos.tsx         # pase de fotos a pantalla completa (autoavance 4,5 s, swipe,
+                        #   teclado, Wake Lock); lo abre FotosClient desde el mural
   ForaDeTempada.tsx     # portada cuando la fiesta ya pasó: días para la siguiente +
                         #   accesos al resumen y a las fotos (no pinta nada antes/durante)
   BoletoTicket.tsx      # réplica del boleto de la camiseta (blanco + azul marino)
