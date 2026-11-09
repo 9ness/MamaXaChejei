@@ -93,6 +93,10 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
         }
     };
 
+    // Math.random e Date.now aquí NON van no render: updateGameLogic só se chama
+    // desde o bucle de requestAnimationFrame (animate). O lint do compilador de
+    // React non o distingue e márcaos como impuros.
+    /* eslint-disable react-hooks/purity */
     const updateGameLogic = (delta: number, totalTime: number) => {
         const currentScore = scoreRef.current;
 
@@ -222,6 +226,8 @@ export function BeerGame({ playerName, onClose }: BeerGameProps) {
             }
         }
     };
+
+    /* eslint-enable react-hooks/purity */
 
     const startGame = () => {
         incrementTotalGames().then(setTotalGames);

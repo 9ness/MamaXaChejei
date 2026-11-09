@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useNow } from '@/lib/use-now';
 import Link from 'next/link';
 import { ITINERARIO, ITINERARIO_PROVISIONAL, type ItinerarioDia } from '@/lib/itinerario';
 import { buscarLugar, mapaUrl, mapsUrl, type LugaresGardados } from '@/lib/lugares';
@@ -16,6 +17,13 @@ function eventoDate(dia: ItinerarioDia, hora: string): number {
     const date = new Date(y, mo - 1, d, h, m);
     if (h < 6) date.setDate(date.getDate() + 1);
     return date.getTime();
+}
+
+/** O día do cartel que cae hoxe (data do calendario do móbil), ou o primeiro. */
+function indiceDeHoxe(): number {
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    return Math.max(0, ITINERARIO.findIndex(d => d.fecha === todayStr));
 }
 
 /** Cando se dá por rematada unha xornada: dúas horas despois do último acto. */
@@ -62,8 +70,13 @@ function Lugar({ texto, lugares }: { texto: string; lugares: LugaresGardados }) 
 }
 
 export function Itinerario({ lugares = {} }: { lugares?: LugaresGardados }) {
-    const [now, setNow] = useState<number | null>(null);
-    const [activeIdx, setActiveIdx] = useState(0);
+    // null no servidor e na hidratación (evita hidratación desaxustada).
+    const now = useNow(60_000);
+    // Por defecto, o día de hoxe se cae dentro do cartel. Calcúlase unha vez,
+    // ao montar, coma antes: se a medianoite te colle mirando os actos da
+    // noite, non che cambia o día debaixo do dedo. No servidor non importa o
+    // valor: con now === null non se pinta nada.
+    const [activeIdx, setActiveIdx] = useState(indiceDeHoxe);
 
     // Ao abrir a portada ás sete da tarde ninguén quere baixar buscando por
     // onde vai a festa: lévase a pantalla soa ao acto de agora. Só a primeira
@@ -87,18 +100,6 @@ export function Itinerario({ lugares = {} }: { lugares?: LugaresGardados }) {
         });
         return () => cancelAnimationFrame(id);
     }, [now]);
-
-    useEffect(() => {
-        const tick = () => setNow(Date.now());
-        tick();
-        // Selecciona por defecto el día de hoy si coincide con algún día del itinerario.
-        const today = new Date();
-        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-        const idx = ITINERARIO.findIndex(d => d.fecha === todayStr);
-        if (idx >= 0) setActiveIdx(idx);
-        const timer = setInterval(tick, 60000);
-        return () => clearInterval(timer);
-    }, []);
 
     if (now === null) return null; // evita hidratación desajustada
 

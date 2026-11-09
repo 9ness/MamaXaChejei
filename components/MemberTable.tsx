@@ -355,9 +355,9 @@ export function MemberTable({ members, isAdmin, onToggle, isMobile = false }: Me
 
     // Filter visibility strictly based on requirements
     const columns = useMemo(() => {
-        return rawColumns.filter((col: any) => {
+        return rawColumns.filter((col) => {
             // Obtenemos el identificador de la columna de forma segura
-            const columnId = col.accessorKey || col.id;
+            const columnId = ('accessorKey' in col ? String(col.accessorKey) : undefined) || col.id;
 
             if (showDates) {
                 // Si es ruta admin, mostramos todo

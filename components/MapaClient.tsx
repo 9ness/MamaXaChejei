@@ -193,31 +193,9 @@ export function MapaClient({ isAdmin = false, lugaresIniciais = {} }: MapaClient
     const liveRef = useRef(false);
     useEffect(() => { liveRef.current = live; }, [live]);
 
-    // Cuenta atrás del tiempo compartido (puntual)
-    useEffect(() => {
-        if (shareUntil === null) return;
-        setNowTick(Date.now());
-        const t = setInterval(() => {
-            const n = Date.now();
-            setNowTick(n);
-            if (n >= shareUntil) {
-                if (liveRef.current) {
-                    stopLive('⌛ Rematou o tempo de compartido en directo.');
-                } else {
-                    setShareUntil(null);
-                    clearSession();
-                    setStatus('⌛ Rematou o tempo. O teu punto xa non se ve.');
-                    refreshPoints();
-                }
-            }
-        }, 1000);
-        return () => clearInterval(t);
-        // refreshPoints/stopLive son estables (useCallback)
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [shareUntil]);
-
     // Cargar preferencias guardadas
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage só existe no móbil: lese ao montar, non no render do servidor.
         setNombre(localStorage.getItem('chat_username') || '');
         const c = localStorage.getItem('mapa_color');
         if (c) setColor(c);
@@ -371,6 +349,34 @@ export function MapaClient({ isAdmin = false, lugaresIniciais = {} }: MapaClient
         if (msg) setStatus(msg);
     }, [refreshPoints]);
 
+    // Cuenta atrás del tiempo compartido (puntual)
+    useEffect(() => {
+        if (shareUntil === null) return;
+        // Sincroniza o reloxo da conta atrás co momento no que empeza: sen isto
+        // pintaría o tempo vello durante o primeiro segundo.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setNowTick(Date.now());
+        const t = setInterval(() => {
+            const n = Date.now();
+            setNowTick(n);
+            if (n >= shareUntil) {
+                if (liveRef.current) {
+                    stopLive('⌛ Rematou o tempo de compartido en directo.');
+                } else {
+                    setShareUntil(null);
+                    clearSession();
+                    setStatus('⌛ Rematou o tempo. O teu punto xa non se ve.');
+                    refreshPoints();
+                }
+            }
+        }, 1000);
+        return () => clearInterval(t);
+        // refreshPoints/stopLive son estables (useCallback). Este efecto vai
+        // DEBAIXO deles: declarado antes, o lint do compilador de React avisa
+        // de que os usa antes de existiren.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [shareUntil]);
+
     // Arranca (o reanuda) el seguimiento en directo. Reutilizable en toggle y al recargar.
     const startLiveWatch = useCallback(() => {
         if (!('geolocation' in navigator)) {
@@ -400,6 +406,7 @@ export function MapaClient({ isAdmin = false, lugaresIniciais = {} }: MapaClient
     useEffect(() => {
         const s = loadSession();
         if (!s) return;
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- retomar a sesión gardada en localStorage ao recargar: só se pode ao montar.
         setShareUntil(s.until);
         if (s.live) {
             startLiveWatch();
@@ -440,6 +447,7 @@ export function MapaClient({ isAdmin = false, lugaresIniciais = {} }: MapaClient
         });
         targetRef.current = m;
         map.setView([la, ln], 18);
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- o punto do enlace só se coñece cando Leaflet xa montou o mapa (mapReady).
         setStatus(nm
             ? `📍 ${nm} compartiu a súa ubicación aquí.`
             : '📍 Alguén da peña compartiu a súa ubicación aquí.');
@@ -548,6 +556,7 @@ export function MapaClient({ isAdmin = false, lugaresIniciais = {} }: MapaClient
         xaCentrado.current = true;
         map.setView([posto.lat, posto.lng], 18);
         lugaresRef.current.get(base.id)?.openPopup();
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- o sitio de /mapa?lugar=… só se pode centrar cando Leaflet xa montou o mapa.
         setStatus(`${posto.emoji} ${base.nome} · aquí é onde toca.`);
     }, [mapReady, lugares]);
 

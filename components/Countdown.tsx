@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useNow } from '@/lib/use-now';
 
-interface TimeLeft {
+export interface TimeLeft {
     months: number;
     weeks: number;
     days: number;
@@ -11,59 +11,46 @@ interface TimeLeft {
     seconds: number;
 }
 
-export function Countdown() {
-    // O Chupitaso: as doce da noite do venres 11 ao sábado 12. Se cambia o
-    // cartel, hai que tocar isto E lib/itinerario.ts.
-    const targetDate = new Date('2026-09-12T00:00:00');
-    const [timeLeft, setTimeLeft] = useState<TimeLeft | null>(null);
-    const [mounted, setMounted] = useState(false);
+// O Chupitaso: as doce da noite do venres 11 ao sábado 12. Se cambia o
+// cartel, hai que tocar isto E lib/itinerario.ts.
+const TARGET_DATE = new Date('2026-09-12T00:00:00');
 
-    useEffect(() => {
-        // null = xa pasou a hora. Entón o contador non se amosa: quedar a cero
-        // na portada durante toda a festa non dicía nada a ninguén.
-        const calcular = (): TimeLeft | null => {
-            const now = new Date();
-            let difference = targetDate.getTime() - now.getTime();
+/**
+ * Canto falta de `now` a `target`. null = xa pasou a hora: entón o contador
+ * non se amosa, que quedar a cero na portada durante toda a festa non dicía
+ * nada a ninguén.
+ */
+export function calcularTempo(target: Date, now: Date): TimeLeft | null {
+    let difference = target.getTime() - now.getTime();
 
-            // Adjust for timezone offset differences (DST) to prevent "losing" an hour
-            // If we are in CET (-60) and target is CEST (-120), we need to add 60 minutes to match wall-clock expectations
-            const offsetDiff = (now.getTimezoneOffset() - targetDate.getTimezoneOffset()) * 60 * 1000;
-            difference += offsetDiff;
+    // Adjust for timezone offset differences (DST) to prevent "losing" an hour
+    // If we are in CET (-60) and target is CEST (-120), we need to add 60 minutes to match wall-clock expectations
+    const offsetDiff = (now.getTimezoneOffset() - target.getTimezoneOffset()) * 60 * 1000;
+    difference += offsetDiff;
 
-            if (difference <= 0) return null;
+    if (difference <= 0) return null;
 
-            // Approximate calculation
-            const totalDays = Math.floor(difference / (1000 * 60 * 60 * 24));
+    // Approximate calculation
+    const totalDays = Math.floor(difference / (1000 * 60 * 60 * 24));
 
-            // Approximate months (30.44 days per month)
-            const months = Math.floor(totalDays / 30.44);
-            const remainingDaysAfterMonths = totalDays - Math.floor(months * 30.44);
+    // Approximate months (30.44 days per month)
+    const months = Math.floor(totalDays / 30.44);
+    const remainingDaysAfterMonths = totalDays - Math.floor(months * 30.44);
 
-            const weeks = Math.floor(remainingDaysAfterMonths / 7);
-            const days = Math.floor(remainingDaysAfterMonths % 7);
+    const weeks = Math.floor(remainingDaysAfterMonths / 7);
+    const days = Math.floor(remainingDaysAfterMonths % 7);
 
-            const hours = Math.floor((difference / (1000 * 60 * 60)) % 24);
-            const minutes = Math.floor((difference / 1000 / 60) % 60);
-            const seconds = Math.floor((difference / 1000) % 60);
+    const hours = Math.floor((difference / (1000 * 60 * 60)) % 24);
+    const minutes = Math.floor((difference / 1000 / 60) % 60);
+    const seconds = Math.floor((difference / 1000) % 60);
 
-            return { months, weeks, days, hours, minutes, seconds };
-        };
+    return { months, weeks, days, hours, minutes, seconds };
+}
 
-        setMounted(true);
-        setTimeLeft(calcular());
-        const timer = setInterval(() => {
-            const t = calcular();
-            setTimeLeft(t);
-            if (!t) clearInterval(timer);
-        }, 1000);
-
-        return () => clearInterval(timer);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    if (!mounted || !timeLeft) return null;
-
-    const TimeBox = ({ value, label }: { value: number, label: string }) => (
+// Fóra do compoñente: definido dentro, React tomábao por un compoñente novo
+// en cada tic do reloxo e desmontaba e volvía montar as seis caixas.
+function TimeBox({ value, label }: { value: number, label: string }) {
+    return (
         <div className="flex flex-col items-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm rounded-lg p-2 md:p-3 shadow-sm border border-slate-200 dark:border-slate-800 min-w-[50px] md:min-w-[70px]">
             <span className="text-xl md:text-3xl font-black text-primary bg-clip-text text-transparent bg-gradient-to-b from-primary to-purple-600">
                 {String(value).padStart(2, '0')}
@@ -73,6 +60,14 @@ export function Countdown() {
             </span>
         </div>
     );
+}
+
+export function Countdown() {
+    // null no servidor e na hidratación: o contador só se pinta no móbil.
+    const now = useNow(1000);
+    const timeLeft = now === null ? null : calcularTempo(TARGET_DATE, new Date(now));
+
+    if (!timeLeft) return null;
 
     return (
         <div className="flex flex-wrap justify-center gap-2 md:gap-4 my-6 py-4">

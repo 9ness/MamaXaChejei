@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useSyncExternalStore } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { createBoleto } from '@/app/actions';
+import { useNombreGuardado } from '@/lib/nome-chat';
 import {
     type BoletoLinea,
     MAX_IMPORTE,
@@ -30,17 +31,6 @@ function toLineas(drafts: LineaDraft[]): BoletoLinea[] {
         pronostico: d.pronostico,
         cuota: Number(d.cuota.replace(',', '.')) || 1,
     }));
-}
-
-/** El nombre que ya usa en el chat. Con useSyncExternalStore y no con un efecto
- *  porque en el servidor no hay localStorage: así React sabe que el valor del
- *  servidor es "" y lo rehace en cliente sin romper la hidratación. */
-function useNombreGuardado() {
-    return useSyncExternalStore(
-        () => () => {},                                     // no cambia solo
-        () => localStorage.getItem('chat_username') || '',  // cliente
-        () => '',                                           // servidor
-    );
 }
 
 function CuotaPicker({
