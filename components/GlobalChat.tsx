@@ -8,6 +8,9 @@ import { usePathname } from 'next/navigation';
 import { BeerGame } from '@/components/BeerGame';
 import { HighScore, getHighScore, getRankingXogo, getTotalGames } from '@/app/actions';
 import { lerAvisos, lerAvisosNoServidor, lerVisto, marcarVisto, subscribirAvisos } from '@/lib/avisos';
+import { CHAVE_NOME_CHAT, useNombreGuardado } from '@/lib/nome-chat';
+import { REACTION_EMOJIS } from '@/lib/chat-config';
+import { useNow } from '@/lib/use-now';
 
 interface ChatMessage {
     id: string;
@@ -21,7 +24,11 @@ interface ChatMessage {
     respondeA?: { id: string; nombre: string; mensaje: string };
 }
 
-const REACTION_EMOJIS = ['😂', '❤️', '🔥', '🍻', '🥳', '💩'];
+type AccionChat =
+    | { type: 'add'; payload: ChatMessage }
+    | { type: 'delete'; payload: { id: string } }
+    | { type: 'react'; payload: { id: string; emoji: string } };
+
 
 export function GlobalChat() {
     const [isOpen, setIsOpen] = useState(false);
@@ -62,7 +69,7 @@ export function GlobalChat() {
     const pathname = usePathname();
     const isAdmin = pathname === '/gestion';
 
-    const [optimisticMessages, addOptimisticAction] = useOptimistic<ChatMessage[], any>(
+    const [optimisticMessages, addOptimisticAction] = useOptimistic<ChatMessage[], AccionChat>(
         messages,
         (state, action) => {
             if (action.type === 'add') return [...state, action.payload];
@@ -82,7 +89,10 @@ export function GlobalChat() {
     );
 
     const [newMessage, setNewMessage] = useState('');
-    const [userName, setUserName] = useState('');
+    // O nome gardado en localStorage, ata que o escribas aquí: entón manda o teu.
+    const nombreGuardado = useNombreGuardado();
+    const [nombreEscrito, setUserName] = useState<string | null>(null);
+    const userName = nombreEscrito ?? nombreGuardado;
     const [isLoading, setIsLoading] = useState(false);
     const [showScrollButton, setShowScrollButton] = useState(false);
 
@@ -143,12 +153,6 @@ export function GlobalChat() {
         };
     }, [isOpen]);
 
-    // Local Storage Name
-    useEffect(() => {
-        const saved = localStorage.getItem('chat_username');
-        if (saved) setUserName(saved);
-    }, []);
-
     const handleSend = async (e?: React.FormEvent) => {
         e?.preventDefault();
         if (!newMessage.trim() || !userName.trim()) return;
@@ -181,6 +185,8 @@ export function GlobalChat() {
             });
             const data = await res.json();
             if (data.messages) setMessages(data.messages.reverse());
+            // Freado polo límite anti-spam: devólvese o texto para non perdelo.
+            else if (res.status === 429) setNewMessage(m => m || msg.mensaje);
         } catch { /* silent */ }
     };
 
@@ -245,15 +251,16 @@ export function GlobalChat() {
     useEffect(() => {
         if (isOpen) {
             isUserScrolledUp.current = false;
-            setShowScrollButton(false);
             // Small timeout to ensure render
             setTimeout(() => scrollToBottom(true), 10);
         }
     }, [isOpen]);
 
     // Helper for relative time
+    // Cada medio minuto, para que "Fai 3 min" non quede conxelado.
+    const now = useNow(30_000);
     const getRelativeTime = (timestamp: number) => {
-        const diff = Date.now() - timestamp;
+        const diff = (now ?? timestamp) - timestamp;
         const mins = Math.floor(diff / 60000);
         if (mins < 1) return 'Agora mesmo';
         if (mins < 60) return `Fai ${mins} min`;
@@ -270,7 +277,7 @@ export function GlobalChat() {
             {!isOpen && (
                 <div className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-4 md:bottom-6 md:right-6 z-50">
                     <Button
-                        onClick={() => setIsOpen(true)}
+                        onClick={() => { setShowScrollButton(false); setIsOpen(true); }}
                         className="relative h-12 w-12 rounded-full shadow-xl bg-primary hover:scale-105 transition-all animate-in zoom-in opacity-80 hover:opacity-100"
                     >
                         <MessageCircle className="h-6 w-6 text-white" />
@@ -578,7 +585,7 @@ export function GlobalChat() {
                                 value={userName}
                                 onChange={(e) => {
                                     setUserName(e.target.value);
-                                    localStorage.setItem('chat_username', e.target.value);
+                                    localStorage.setItem(CHAVE_NOME_CHAT, e.target.value);
                                 }}
                                 className="w-1/3 text-xs h-9 bg-slate-50 font-bold text-indigo-900"
                             />

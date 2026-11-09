@@ -1,26 +1,47 @@
 import { redis } from '@/lib/redis';
 import { isAdmin as isAdminSession } from '@/lib/admin-auth';
+import { clientIp, rateLimited } from '@/lib/rate-limit';
+import { esEmojiValido } from '@/lib/chat-config';
+import {
+    CHAT_N_KEY,
+    PINNED_CHAT_KEY,
+    borrarMensaje,
+    construirMensaje,
+    leerMensajes,
+    publicarMensaje,
+    reaccionar,
+} from '@/lib/chat';
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
-
-const CHAT_KEY = 'fiesta:chat';
-const PINNED_CHAT_KEY = 'fiesta:chat:pinned';
 
 // Misma sesión firmada que usan /gestion y los server actions.
 const isAdminRequest = isAdminSession;
 
 const unauthorized = () => NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
+// Topes por IP contra el spam. Holgados a propósito: en la fiesta media peña
+// sale por la misma wifi (o el mismo CGNAT del móvil) y comparte IP.
+const MAX_MENSAXES_MIN = 40;
+const MAX_REACCIONS_MIN = 120;
+
+const slowDown = () => NextResponse.json(
+    { error: 'Vas moi rápido. Agarda un minuto.' },
+    { status: 429 },
+);
+
+async function leerBody(request: Request): Promise<Record<string, unknown>> {
+    try {
+        const b = await request.json();
+        return b && typeof b === 'object' ? b : {};
+    } catch {
+        return {};
+    }
+}
+
 export async function GET() {
     try {
-        const rawMsgs = await redis.lrange(CHAT_KEY, 0, 49);
-        const msgs = rawMsgs.map((s: string | object) => {
-            try {
-                if (typeof s === 'object') return s;
-                return JSON.parse(s);
-            } catch { return null; }
-        }).filter(Boolean);
+        const msgs = await leerMensajes();
 
         // Get pinned message
         let pinnedMessage = null;
@@ -41,66 +62,32 @@ export async function GET() {
                 'Surrogate-Control': 'no-store'
             }
         });
-    } catch (error) {
+    } catch {
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }
 
 export async function POST(request: Request) {
     try {
-        const body = await request.json();
-        const { nombre, mensaje, id, respondeA } = body;
-
-        if (!nombre || !mensaje) {
-            return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
-        }
+        const body = await leerBody(request);
 
         // Never trust the client: the admin flag comes from the cookie, not the body.
         const isAdmin = await isAdminRequest();
+        const msg = construirMensaje(body, isAdmin, Date.now(), () => crypto.randomUUID());
+        if (!msg) {
+            return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
+        }
 
-        // Apply visual distinction for admin
-        const finalNombre = isAdmin ? `${nombre} (Admin)` : nombre;
+        if (!isAdmin && await rateLimited('chat', clientIp(request), MAX_MENSAXES_MIN, 60)) {
+            return slowDown();
+        }
 
-        // La respuesta guarda una COPIA del mensaje original (nombre + un trozo
-        // del texto). Si luego lo borran, la cita sigue teniendo sentido y no
-        // hay que ir a buscarlo a la lista.
-        const cita = respondeA && typeof respondeA === 'object'
-            ? {
-                id: String(respondeA.id ?? '').slice(0, 64),
-                nombre: String(respondeA.nombre ?? '').slice(0, 40),
-                mensaje: String(respondeA.mensaje ?? '').slice(0, 120),
-            }
-            : null;
-
-        const msg = {
-            id: id || crypto.randomUUID(),
-            nombre: finalNombre.slice(0, 40),
-            mensaje: String(mensaje).slice(0, 500),
-            fecha: Date.now(),
-            reacciones: {},
-            isPinned: false,
-            isAdminMessage: !!isAdmin,
-            ...(cita && cita.id ? { respondeA: cita } : {})
-        };
-
-        await redis.lpush(CHAT_KEY, JSON.stringify(msg));
-        await redis.ltrim(CHAT_KEY, 0, 49);
-        // Contador para la insignia de mensajes sin leer (ver lib/avisos.ts).
-        await redis.incr('fiesta:chat_n');
-
-        // Fetch updated list
-        const rawMsgs = await redis.lrange(CHAT_KEY, 0, 49);
-        const updatedMsgs = rawMsgs.map((s: string | object) => {
-            try {
-                if (typeof s === 'object') return s;
-                return JSON.parse(s);
-            } catch { return null; }
-        }).filter(Boolean);
+        const updatedMsgs = await publicarMensaje(msg);
 
         return NextResponse.json({ success: true, messages: updatedMsgs }, {
             headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
         });
-    } catch (error) {
+    } catch {
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }
@@ -109,58 +96,10 @@ export async function DELETE(request: Request) {
     try {
         if (!(await isAdminRequest())) return unauthorized();
 
-        const { id } = await request.json();
-        if (!id) return NextResponse.json({ error: 'Missing ID' }, { status: 400 });
+        const { id } = await leerBody(request);
+        if (typeof id !== 'string' || !id) return NextResponse.json({ error: 'Missing ID' }, { status: 400 });
 
-        // Get all messages, filter out the one to delete, rewrite list
-        // Redis LREM removes by value, but value is JSON string which might vary slightly?
-        // Safer to read all, filter, delete key, rpush all back.
-        // For atomic safety usually we use Lua, but for this scale read/write is okay.
-
-        const rawMsgs = await redis.lrange(CHAT_KEY, 0, 99);
-        const msgs = rawMsgs.map((s: string | object) => {
-            try { return typeof s === 'object' ? s : JSON.parse(s); } catch { return null; }
-        }).filter((m: any) => m && m.id !== id);
-
-        // Rewrite list
-        await redis.del(CHAT_KEY);
-        if (msgs.length > 0) {
-            // RPUSH preserves order if we push in reverse? No, lrange is 0..N (newest first usually if we lpush)
-            // If we LPUSH'd, 0 is newest.
-            // So if msgs is [newest, ..., oldest]
-            // We should RPUSH them in reverse order?
-            // Or just RPUSH [newest, ..., oldest] makes Newest at Index 0? No.
-            // If we RPUSH [A, B], list is A, B. Index 0 is A.
-            // If our list was [Newest, Oldest].
-            // We want Index 0 to be Newest.
-            // So we want result List: [Newest, ..., Oldest]
-            // redis.rpush(key, ...msgs) -> List becomes [msg1, msg2...]
-            // So yes, RPUSH the array as-is? 
-            // Wait. redis.lrange(0, -1) returns [Item0, Item1...]
-            // If Item0 is Newest.
-            // We want Item0 to stay Newest.
-            // redis.del -> List empty.
-            // redis.rpush(key, Item0, Item1...) -> List: Item0, Item1...
-            // Yes.
-
-            // Need to stringify
-            const stringified = msgs.map(m => JSON.stringify(m));
-            await redis.rpush(CHAT_KEY, ...stringified);
-        }
-
-        // El contador sube con CUALQUIER cambio (no solo mensajes nuevos): es
-        // lo que mira el chat para saber si tiene que recargar la lista.
-        await redis.incr('fiesta:chat_n');
-
-        // Also check if it was pinned
-        const pinnedRaw = await redis.get(PINNED_CHAT_KEY);
-        if (pinnedRaw) {
-            const pinned = typeof pinnedRaw === 'object' ? pinnedRaw : JSON.parse(pinnedRaw as string);
-            if (pinned.id === id) {
-                await redis.del(PINNED_CHAT_KEY);
-            }
-        }
-
+        await borrarMensaje(id);
         return NextResponse.json({ success: true });
     } catch {
         return NextResponse.json({ error: 'Error deleting' }, { status: 500 });
@@ -169,48 +108,33 @@ export async function DELETE(request: Request) {
 
 export async function PATCH(request: Request) {
     try {
-        const body = await request.json();
-        const { action, id, emoji, payload } = body;
+        const { action, id, emoji, payload } = await leerBody(request);
 
         if (action === 'pin') {
             if (!(await isAdminRequest())) return unauthorized();
             if (!payload) return NextResponse.json({ error: 'Missing payload for pin' }, { status: 400 });
             await redis.set(PINNED_CHAT_KEY, JSON.stringify(payload));
-            await redis.incr('fiesta:chat_n');
+            await redis.incr(CHAT_N_KEY);
             return NextResponse.json({ success: true });
         }
 
         if (action === 'unpin') {
             if (!(await isAdminRequest())) return unauthorized();
             await redis.del(PINNED_CHAT_KEY);
-            await redis.incr('fiesta:chat_n');
+            await redis.incr(CHAT_N_KEY);
             return NextResponse.json({ success: true });
         }
 
         if (action === 'react') {
-            // Complicated: Read list, find message, update reaction, rewrite list.
-            const rawMsgs = await redis.lrange(CHAT_KEY, 0, 99);
-            let found = false;
-            const msgs = rawMsgs.map((s: string | object) => {
-                try {
-                    const m = typeof s === 'object' ? s : JSON.parse(s);
-                    if (m && m.id === id) {
-                        found = true;
-                        m.reacciones = m.reacciones || {};
-                        m.reacciones[emoji] = (m.reacciones[emoji] || 0) + 1;
-                    }
-                    return m;
-                } catch { return null; }
-            }).filter(Boolean);
-
-            if (found) {
-                await redis.del(CHAT_KEY);
-                if (msgs.length > 0) {
-                    const stringified = msgs.map((m: any) => JSON.stringify(m));
-                    await redis.rpush(CHAT_KEY, ...stringified);
-                }
-                await redis.incr('fiesta:chat_n');
+            // Solo las reacciones de la paleta: antes cualquier texto acababa
+            // como clave dentro del mensaje guardado.
+            if (typeof id !== 'string' || !id || !esEmojiValido(emoji)) {
+                return NextResponse.json({ error: 'Invalid reaction' }, { status: 400 });
             }
+            if (await rateLimited('chat_react', clientIp(request), MAX_REACCIONS_MIN, 60)) {
+                return slowDown();
+            }
+            await reaccionar(id, emoji);
             return NextResponse.json({ success: true });
         }
 
